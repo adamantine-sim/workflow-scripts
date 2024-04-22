@@ -20,9 +20,12 @@
 
 #include <deal.II/opencascade/manifold_lib.h>
 
-dealii::Point<3> my_closest_point(const std::vector<TopoDS_Face> &faces,
-                                  const dealii::Point<3> &origin,
-                                  const double tolerance) {
+// This is basically the same as dealii::OpenCASCADE closest_point
+// but simplified for our needs. The interface also allows passing in
+// a std::vector of faces instead of the whole shape.
+dealii::Point<3> closest_point(const std::vector<TopoDS_Face> &faces,
+                               const dealii::Point<3> &origin,
+                               const double tolerance) {
   gp_Pnt Pproj = dealii::OpenCASCADE::point(origin);
 
   double minDistance = std::numeric_limits<double>::max();
@@ -49,11 +52,18 @@ dealii::Point<3> my_closest_point(const std::vector<TopoDS_Face> &faces,
   return dealii::OpenCASCADE::point<3>(Pproj);
 }
 
+// Try to move every boundary point to the surface descriped by the TopoDS_Faces
+// passed in as argument. Optionally, ignore faces in z-direction.
 void snap_to_iges(
     dealii::Triangulation<3> &tria, const std::vector<TopoDS_Face> &faces,
     dealii::OpenCASCADE::NormalProjectionManifold<3, 3> &projector,
     bool exclude_z_faces) {
 
+  // Store for every boundary point all its normal vectors. If all of these
+  // point in the same direction, replace its x- and y-coordinates with the
+  // respective coordinates of the closest point on teh surface. Otherwise, the
+  // point is a corner point and projecting it would collapse vertices. Instead
+  // take the average of the old and new point.
   std::map<unsigned int, std::pair<std::reference_wrapper<dealii::Point<3>>,
                                    std::vector<dealii::Tensor<1, 3>>>>
       vertex_map;
@@ -95,14 +105,16 @@ void snap_to_iges(
       }
     }
     auto &vertex = std::get<0>(boundary_vertex_iterator.second).get();
-    auto proj = my_closest_point(faces, vertex, 1.e-10);
+    auto proj = closest_point(faces, vertex, 1.e-10);
+    // For tessellated meshes the minimal product between normal vectors can
+    // only be -1,0, or 1.
     if (minimum_product > .5) {
       vertex(0) = proj(0);
-      vertex(1) = proj(1);
+      vertex(1) = proj(1); // curved wall
       // vertex(2) = proj(2); // hourglass
     } else {
       vertex(0) = (vertex(0) + proj(0)) / 2;
-      vertex(1) = (vertex(1) + proj(1)) / 2;
+      vertex(1) = (vertex(1) + proj(1)) / 2; // curved wall
       // vertex(2) = (vertex(2) + proj(2)) / 2; // hourglass
     }
   }
@@ -133,9 +145,13 @@ int main(int argc, char *argv[]) {
   TopExp_Explorer exp;
   gp_Pnt tmp_proj;
 
+  // Ignore TopoDS::Faces that are planes with z-normal. This might or might not
+  // be a good choice depending on the input files. It should not be detrimental
+  // if the face is indeed planar but might be problematic if we wrongly detect
+  // it to be planar. Excluding those faces should mostly help with the edges at
+  // the top and bottom of the mesh (assuming thet are planar).
   bool exclude_z_faces = false;
 
-  // We don't care about faces with z-normal so exclude them here
   std::vector<TopoDS_Face> faces;
   {
     for (exp.Init(surface, TopAbs_FACE); exp.More(); exp.Next()) {
@@ -148,6 +164,8 @@ int main(int argc, char *argv[]) {
         BRepBndLib::Add(face, box);
         box.Get(aXmin, aYmin, aZmin, aXmax, aYmax, aZmax);
 
+        // Obtain the four corners of the face and check if they are lying in
+        // the same plane with z-normal
         double u1, u2, v1, v2;
         SurfToProj->Bounds(u1, u2, v1, v2);
         auto point_0 = dealii::OpenCASCADE::point<3>(SurfToProj->Value(u1, v1));
@@ -162,6 +180,8 @@ int main(int argc, char *argv[]) {
         double deviation_from_z =
             normal / normal.norm() * dealii::Tensor<1, 3>({0, 0, 1});
 
+        // TODO find better tolerances to decide if a face is planar with
+        // z-normal or not.
         if (std::abs(deviation) > .1 || std::abs(deviation_from_z) < .9)
           faces.push_back(face);
       } else

@@ -10,6 +10,7 @@
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria.h>
 #include <deal.II/numerics/data_out.h>
+#include <deal.II/opencascade/manifold_lib.h>
 
 #include <BRepBndLib.hxx>
 #include <BRep_Tool.hxx>
@@ -18,20 +19,20 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 
-#include <deal.II/opencascade/manifold_lib.h>
-
 // This is basically the same as dealii::OpenCASCADE closest_point
 // but simplified for our needs. The interface also allows passing in
 // a std::vector of faces instead of the whole shape.
 dealii::Point<3> closest_point(const std::vector<TopoDS_Face> &faces,
                                const dealii::Point<3> &origin,
-                               const double tolerance) {
+                               const double tolerance)
+{
   gp_Pnt Pproj = dealii::OpenCASCADE::point(origin);
 
   double minDistance = std::numeric_limits<double>::max();
   gp_Pnt tmp_proj(0.0, 0.0, 0.0);
 
-  for (const auto &face : faces) {
+  for (const auto &face : faces)
+  {
     // the projection function needs a surface, so we obtain the
     // surface upon which the face is defined
     Handle(Geom_Surface) SurfToProj = BRep_Tool::Surface(face);
@@ -43,7 +44,8 @@ dealii::Point<3> closest_point(const std::vector<TopoDS_Face> &faces,
     SurfToProj->D0(proj_params.X(), proj_params.Y(), tmp_proj);
 
     double distance = dealii::OpenCASCADE::point<3>(tmp_proj).distance(origin);
-    if (distance < minDistance) {
+    if (distance < minDistance)
+    {
       minDistance = distance;
       Pproj = tmp_proj;
     }
@@ -57,7 +59,8 @@ dealii::Point<3> closest_point(const std::vector<TopoDS_Face> &faces,
 void snap_to_iges(
     dealii::Triangulation<3> &tria, const std::vector<TopoDS_Face> &faces,
     dealii::OpenCASCADE::NormalProjectionManifold<3, 3> &projector,
-    bool exclude_z_faces) {
+    bool exclude_z_faces)
+{
 
   // Store for every boundary point all its normal vectors. If all of these
   // point in the same direction, replace its x- and y-coordinates with the
@@ -69,24 +72,32 @@ void snap_to_iges(
       vertex_map;
   std::array<dealii::Tensor<1, 3>, dealii::GeometryInfo<3>::vertices_per_face>
       normal_at_vertex;
-  for (const auto &cell : tria.active_cell_iterators()) {
-    for (const unsigned int i : cell->face_indices()) {
+  for (const auto &cell : tria.active_cell_iterators())
+  {
+    for (const unsigned int i : cell->face_indices())
+    {
       const auto &face = cell->face(i);
-      if (face->at_boundary()) {
+      if (face->at_boundary())
+      {
         projector.get_normals_at_vertices(face, normal_at_vertex);
-        for (unsigned j = 0; j < face->n_vertices(); ++j) {
+        for (unsigned j = 0; j < face->n_vertices(); ++j)
+        {
           const unsigned int vertex_index = face->vertex_index(j);
           const auto &vertex_map_iterator = vertex_map.find(vertex_index);
           auto normal = normal_at_vertex[j] / normal_at_vertex[j].norm();
 
           if (!(exclude_z_faces &&
-                std::abs(normal * dealii::Tensor<1, 3>{{0, 0, 1}}) < 0.1)) {
-            if (vertex_map_iterator == vertex_map.end()) {
+                std::abs(normal * dealii::Tensor<1, 3>{{0, 0, 1}}) < 0.1))
+          {
+            if (vertex_map_iterator == vertex_map.end())
+            {
               std::pair<std::reference_wrapper<dealii::Point<3>>,
                         std::vector<dealii::Tensor<1, 3>>>
                   pair(face->vertex(j), {normal});
               vertex_map.emplace(vertex_index, pair);
-            } else {
+            }
+            else
+            {
               std::get<1>(vertex_map_iterator->second).push_back(normal);
             }
           }
@@ -95,11 +106,14 @@ void snap_to_iges(
     }
   }
 
-  for (const auto &boundary_vertex_iterator : vertex_map) {
+  for (const auto &boundary_vertex_iterator : vertex_map)
+  {
     const auto &normals = std::get<1>(boundary_vertex_iterator.second);
     double minimum_product = 1;
-    for (unsigned int i = 0; i < normals.size(); ++i) {
-      for (unsigned int j = i + 1; j < normals.size(); ++j) {
+    for (unsigned int i = 0; i < normals.size(); ++i)
+    {
+      for (unsigned int j = i + 1; j < normals.size(); ++j)
+      {
         auto product = normals[i] * normals[j];
         minimum_product = std::min(product, minimum_product);
       }
@@ -108,11 +122,14 @@ void snap_to_iges(
     auto proj = closest_point(faces, vertex, 1.e-10);
     // For tessellated meshes the minimal product between normal vectors can
     // only be -1,0, or 1.
-    if (minimum_product > .5) {
+    if (minimum_product > .5)
+    {
       vertex(0) = proj(0);
       vertex(1) = proj(1); // curved wall
       // vertex(2) = proj(2); // hourglass
-    } else {
+    }
+    else
+    {
       vertex(0) = (vertex(0) + proj(0)) / 2;
       vertex(1) = (vertex(1) + proj(1)) / 2; // curved wall
       // vertex(2) = (vertex(2) + proj(2)) / 2; // hourglass
@@ -120,8 +137,10 @@ void snap_to_iges(
   }
 }
 
-int main(int argc, char *argv[]) {
-  if (argc != 4) {
+int main(int argc, char *argv[])
+{
+  if (argc != 4)
+  {
     std::cerr
         << "ERROR: The tool requires three runtime arguments for the "
            "tessellated input vtk file, the IGES file, and the output vtk file!"
@@ -154,9 +173,11 @@ int main(int argc, char *argv[]) {
 
   std::vector<TopoDS_Face> faces;
   {
-    for (exp.Init(surface, TopAbs_FACE); exp.More(); exp.Next()) {
+    for (exp.Init(surface, TopAbs_FACE); exp.More(); exp.Next())
+    {
       TopoDS_Face face = TopoDS::Face(exp.Current());
-      if (exclude_z_faces) {
+      if (exclude_z_faces)
+      {
         Handle(Geom_Surface) SurfToProj = BRep_Tool::Surface(face);
         double aXmin, aYmin, aZmin, aXmax, aYmax, aZmax;
 
@@ -184,7 +205,8 @@ int main(int argc, char *argv[]) {
         // z-normal or not.
         if (std::abs(deviation) > .1 || std::abs(deviation_from_z) < .9)
           faces.push_back(face);
-      } else
+      }
+      else
         faces.push_back(face);
     }
   }

@@ -54,7 +54,7 @@ dealii::Point<3> closest_point(const std::vector<TopoDS_Face> &faces,
   return dealii::OpenCASCADE::point<3>(Pproj);
 }
 
-// Try to move every boundary point to the surface descriped by the TopoDS_Faces
+// Try to move every boundary point to the surface described by the TopoDS_Faces
 // passed in as argument. Optionally, ignore faces in z-direction.
 void snap_to_iges(
     dealii::Triangulation<3> &tria, const std::vector<TopoDS_Face> &faces,
@@ -64,7 +64,7 @@ void snap_to_iges(
 
   // Store for every boundary point all its normal vectors. If all of these
   // point in the same direction, replace its x- and y-coordinates with the
-  // respective coordinates of the closest point on teh surface. Otherwise, the
+  // respective coordinates of the closest point on the surface. Otherwise, the
   // point is a corner point and projecting it would collapse vertices. Instead
   // take the average of the old and new point.
   std::map<unsigned int, std::pair<std::reference_wrapper<dealii::Point<3>>,

@@ -161,6 +161,8 @@ int main(int argc, char *argv[])
   std::cout << "Bounding Box: (" << Xmin << ',' << Ymin << ',' << Zmin << "), ("
             << Xmax << ',' << Ymax << ',' << Zmax << ")\n";
 
+  dealii::OpenCASCADE::write_STL(surface, "debug.STL", 1.e-3);
+
   TopExp_Explorer exp;
   gp_Pnt tmp_proj;
 
@@ -230,6 +232,13 @@ int main(int argc, char *argv[])
                     tria);*/
   // For curved wall
   dealii::GridTools::scale(.01, tria);
+
+  dealii::BoundingBox vtk_bounding_box = tria.begin_active()->bounding_box();
+  for (const auto &cell : tria.active_cell_iterators())
+    vtk_bounding_box.merge_with(cell->bounding_box());
+  std::cout << "Bounding Box (VTK): ("
+            << vtk_bounding_box.get_boundary_points().first << ") ("
+            << vtk_bounding_box.get_boundary_points().second << ")\n";
 
   dealii::GridOut grid_out;
   {

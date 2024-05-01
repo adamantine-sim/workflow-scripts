@@ -125,14 +125,12 @@ void snap_to_iges(
     if (minimum_product > .5)
     {
       vertex(0) = proj(0);
-      vertex(1) = proj(1); // curved wall
-      // vertex(2) = proj(2); // hourglass
+      vertex(1) = proj(1);
     }
     else
     {
       vertex(0) = (vertex(0) + proj(0)) / 2;
-      vertex(1) = (vertex(1) + proj(1)) / 2; // curved wall
-      // vertex(2) = (vertex(2) + proj(2)) / 2; // hourglass
+      vertex(1) = (vertex(1) + proj(1)) / 2;
     }
   }
 }
@@ -219,19 +217,6 @@ int main(int argc, char *argv[])
   dealii::Triangulation<3> tria;
   gi.attach_triangulation(tria);
   gi.read_vtk(in);
-  // For Hourglass
-  /*dealii::GridTools::transform ([](const dealii::Point<3> &p) ->
-     dealii::Point<3>
-                    {
-                      dealii::Point<3> q = p;
-                      std::swap(q[1], q[2]);
-                      q[0] -= 0.07;
-                      q[2] -= 0.07;
-                      return q;
-                    },
-                    tria);*/
-  // For curved wall
-  dealii::GridTools::scale(.01, tria);
 
   dealii::BoundingBox vtk_bounding_box = tria.begin_active()->bounding_box();
   for (const auto &cell : tria.active_cell_iterators())

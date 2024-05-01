@@ -151,13 +151,15 @@ int main(int argc, char *argv[])
 
   TopoDS_Shape surface = dealii::OpenCASCADE::read_IGES(argv[2]);
 
-  double Xmin, Ymin, Zmin, Xmax, Ymax, Zmax;
+  double minima[3];
+  double maxima[3];
   Bnd_Box B;
   BRepBndLib::Add(surface, B);
-  B.Get(Xmin, Ymin, Zmin, Xmax, Ymax, Zmax);
+  B.Get(minima[0], minima[1], minima[2], maxima[0], maxima[1], maxima[2]);
 
-  std::cout << "Bounding Box: (" << Xmin << ',' << Ymin << ',' << Zmin << "), ("
-            << Xmax << ',' << Ymax << ',' << Zmax << ")\n";
+  std::cout << "Bounding Box: (" << minima[0] << ',' << minima[1] << ','
+            << minima[2] << "), (" << maxima[0] << ',' << maxima[1] << ','
+            << maxima[2] << ")\n";
 
   dealii::OpenCASCADE::write_STL(surface, "debug.STL", 1.e-3);
 
@@ -224,6 +226,19 @@ int main(int argc, char *argv[])
   std::cout << "Bounding Box (VTK): ("
             << vtk_bounding_box.get_boundary_points().first << ") ("
             << vtk_bounding_box.get_boundary_points().second << ")\n";
+
+  // Compute shift and scaling to transform bouding boxes for debugging.
+  for (int i = 0; i < 3; ++i)
+  {
+    double new_1 = vtk_bounding_box.get_boundary_points().first(i);
+    double new_2 = vtk_bounding_box.get_boundary_points().second(i);
+    double old_1 = minima[i];
+    double old_2 = maxima[i];
+    double shift = (old_2 * new_1 - new_2 * old_1) / (new_2 - new_1);
+    double scale = new_1 / (old_1 + shift);
+    std::cout << "shift[" << i << "]: " << shift << ", scale[" << i
+              << "]: " << scale << '\n';
+  }
 
   dealii::GridOut grid_out;
   {

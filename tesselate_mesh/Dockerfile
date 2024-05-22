@@ -1,7 +1,9 @@
-ARG BASE=opencfd/openfoam-dev:latest
+ARG BASE=openfoam/openfoam10-graphical-apps
 FROM $BASE
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+USER root
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
       python3-pip \
       && \

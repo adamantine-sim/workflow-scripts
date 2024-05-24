@@ -10,3 +10,6 @@ endif()
 add_executable(snap_to_tessellated_mesh.exe snap_to_tessellated_mesh.cpp)
 
 target_link_libraries(snap_to_tessellated_mesh.exe dealii::dealii)
+
+enable_testing()
+add_subdirectory(tests)

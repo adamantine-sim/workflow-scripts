@@ -87,7 +87,7 @@ void snap_to_iges(
           auto normal = normal_at_vertex[j] / normal_at_vertex[j].norm();
 
           if (!(exclude_z_faces &&
-                std::abs(normal * dealii::Tensor<1, 3>{{0, 0, 1}}) < 0.1))
+                std::abs(normal * dealii::Tensor<1, 3>{{0, 0, 1}}) > 0.1))
           {
             if (vertex_map_iterator == vertex_map.end())
             {
@@ -137,12 +137,13 @@ void snap_to_iges(
 
 int main(int argc, char *argv[])
 {
-  if (argc != 4)
+  if (argc < 4 || argc > 5)
   {
-    std::cerr
-        << "ERROR: The tool requires three runtime arguments for the "
-           "tessellated input vtk file, the IGES file, and the output vtk file!"
-        << std::endl;
+    std::cerr << "ERROR: The tool requires three runtime arguments for the "
+                 "tessellated input vtk file, the IGES file, and the output "
+                 "vtk file! Optionally, excluding z-facses can be requested. "
+                 "However, the number of runtime arguments is "
+              << argc - 1 << std::endl;
     std::abort();
   }
   std::cout << "Input VTK file: " << argv[1] << '\n'
@@ -171,7 +172,7 @@ int main(int argc, char *argv[])
   // if the face is indeed planar but might be problematic if we wrongly detect
   // it to be planar. Excluding those faces should mostly help with the edges at
   // the top and bottom of the mesh (assuming thet are planar).
-  bool exclude_z_faces = false;
+  bool const exclude_z_faces = argc == 5 ? std::stoi(argv[4]) : false;
 
   std::vector<TopoDS_Face> faces;
   {

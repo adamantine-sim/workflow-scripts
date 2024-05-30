@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autofoam"
+version = "0.0.1"
+authors = [
+    { name="John Coleman", email="colemanjs@ornl.gov" },
+    { name="Gerry Knapp", email="knappgl@ornl.gov" },
+]
+description = "A package for setting up AdditiveFOAM cases based on ORNL MDF Peregrine build data"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    'pandas'
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]  # ["."] by default
+
+[project.scripts]
+autofoam="autofoam.main:main"

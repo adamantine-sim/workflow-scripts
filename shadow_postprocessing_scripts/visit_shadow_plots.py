@@ -31,13 +31,12 @@ with open(rayfile_filename, mode='r') as file:
 
 view_from_rayfile_string = second_line[:3]
 view_from_rayfile = [float(x) for x in view_from_rayfile_string]
-print(view_from_rayfile)
 
-# Hard-coding these for now, may add these as arguments later
-variable = 'temperature'
 view = tuple(view_from_rayfile)
-view_focus = (0.077, 0.00635, 0.06455) # Not sure if this will work across examples
 view_up = (0, 0, 1)
+
+# Hard-coding the variable for now
+variable = 'temperature'
 
 print("VisIt attepting to load " + filename + "...")
 
@@ -160,24 +159,9 @@ else:
     DrawPlots()
 
 # Set the view
-View3DAtts = View3DAttributes()
+View3DAtts = GetView3D()
 View3DAtts.viewNormal = view
-View3DAtts.focus = view_focus
 View3DAtts.viewUp = view_up
-View3DAtts.viewAngle = 30
-View3DAtts.parallelScale = 0.100678
-View3DAtts.nearPlane = -0.201356
-View3DAtts.farPlane = 0.201356
-View3DAtts.imagePan = (0, 0)
-View3DAtts.imageZoom = 1
-View3DAtts.perspective = 1
-View3DAtts.eyeAngle = 2
-View3DAtts.centerOfRotationSet = 0
-View3DAtts.centerOfRotation = (0.077, 0.00635, 0.06455)
-View3DAtts.axis3DScaleFlag = 0
-View3DAtts.axis3DScales = (1, 1, 1)
-View3DAtts.shear = (0, 0, 1)
-View3DAtts.windowValid = 1
 SetView3D(View3DAtts)
 
 # Set annotations

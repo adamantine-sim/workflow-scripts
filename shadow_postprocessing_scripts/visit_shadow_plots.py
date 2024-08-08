@@ -1,12 +1,14 @@
 import sys
 import os
 import argparse
+import csv
 
 # Setting up the argument parser
 parser = argparse.ArgumentParser(description="Digital shadow plotter",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-d", "--data-directory", help="location of the files for VisIt to load")
 parser.add_argument("-n", "--filename", default='solution_m0', help="base simulation filename")
+parser.add_argument("-r", "--rayfile", help="base simulation filename")
 parser.add_argument("-o", "--output-directory", default='', help="location to write the images to")
 parser.add_argument("-t", "--num-iter", help="simulation iteration number")
 parser.add_argument("-e", "--experimental-data", action='store_true', help="plots experimental data on the simulation mesh")
@@ -19,12 +21,23 @@ num_iter = args.num_iter
 data_directory = args.data_directory
 output_directory = args.output_directory
 filename = data_directory + args.filename + '.' + str(num_iter) + '.pvtu'
+rayfile_filename = data_directory + args.rayfile
+
+# Extract the camera position from the rayfile
+with open(rayfile_filename, mode='r') as file:
+    reader = csv.reader(file)
+    next(reader)  # Skip the header line
+    second_line = next(reader)  # Read the second line
+
+view_from_rayfile_string = second_line[:3]
+view_from_rayfile = [float(x) for x in view_from_rayfile_string]
+print(view_from_rayfile)
 
 # Hard-coding these for now, may add these as arguments later
 variable = 'temperature'
-view = (-0.34, 0.88, 0.32)
-view_focus = (0.077, 0.00635, 0.06455)
-view_up = (0.11, -0.30, 0.95)
+view = tuple(view_from_rayfile)
+view_focus = (0.077, 0.00635, 0.06455) # Not sure if this will work across examples
+view_up = (0, 0, 1)
 
 print("VisIt attepting to load " + filename + "...")
 
@@ -72,7 +85,7 @@ if (args.experimental_data):
     SubsetAtts.invertColorTable = 0
     SubsetAtts.legendFlag = 1
     SubsetAtts.lineWidth = 0
-    SubsetAtts.singleColor = (255, 255, 255, 255)
+    SubsetAtts.singleColor = (192, 192, 192, 255)
     SubsetAtts.SetMultiColor(0, (255, 0, 0, 255))
     SubsetAtts.SetMultiColor(1, (0, 255, 0, 255))
     SubsetAtts.SetMultiColor(2, (0, 0, 255, 255))
@@ -227,6 +240,10 @@ for plot in range(0, num_plots):
     
     if plot == 0:
         legend.drawLabels = 1
+    else:
+        # Move additional legends offscreen
+        legend.managePosition = 0
+        legend.position = (-1000,-1000)    
     
 # Save the plot to file
 SaveWindowAtts = SaveWindowAttributes()

@@ -28,5 +28,5 @@ Command line arguments:
 
 Example usage:
 ```
-python3 shadow_postprocessor.py -d /Path/To/Directory/With/Simulation/Results/ --output-directory /Path/Where/You/Want/The/Image/Files/shadow_postprocessing_scripts/ -n solution -p '"(0.016, 0.00535, 0.0765)"' --visit-path /Path/To/VisIt/visit --print-index 0 --rayfile-filename rayfile.csv --sim-field-plot --expt-field-plot --single-time-series-plot --variability-time-series-plot
+python3 shadow_postprocessor.py -d /Path/To/Directory/With/Simulation/Results/ --output-directory /Path/Where/You/Want/The/Image/Files/ -n solution -p '"(0.016, 0.00535, 0.0765)"' --visit-path /Path/To/VisIt/visit --print-index 0 --rayfile-filename rayfile.csv --sim-field-plot --expt-field-plot --single-time-series-plot --variability-time-series-plot
 ```

@@ -14,8 +14,6 @@ parser.add_argument("-t", "--num-iter", help="simulation iteration number")
 parser.add_argument("-e", "--experimental-data", action='store_true', help="plots experimental data on the simulation mesh")
 args = parser.parse_args()
 
-print(args)
-
 # Getting some variables out of the argument parser
 num_iter = args.num_iter
 data_directory = args.data_directory
@@ -46,7 +44,6 @@ print('done.')
 
 output_filename = None
 num_plots = None
-print('OUTPUT DIRECTORY', output_directory)
 
 if (args.experimental_data):
     output_filename = 'experimental_temperature_'

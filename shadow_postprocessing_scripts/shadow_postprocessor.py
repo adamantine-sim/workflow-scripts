@@ -24,7 +24,7 @@ parser.add_argument("--variability-time-series-plot", action='store_true', defau
 parser.add_argument("-p", "--point", help="point of interest for time series plots")
 parser.add_argument("--visit-path", help="path to the VisIt executable")
 parser.add_argument("--print-index", default=0, help='index of the print for variability plots')
-parser.add_argument("--rayfile-filename", help='name of the rayfile, assumed to be in the data-directory')
+parser.add_argument("--rayfile-path", help='the full path to the rayfile used to set the view direction')
 args = parser.parse_args()
 
 plot_sim_field = args.sim_field_plot
@@ -38,7 +38,7 @@ output_directory = args.output_directory
 point_of_interest = args.point
 path_to_visit = args.visit_path
 print_index = args.print_index
-rayfile = args.rayfile_filename
+rayfile = args.rayfile_path
 
 
 # Some hard-coded variables that we may want to open up to users

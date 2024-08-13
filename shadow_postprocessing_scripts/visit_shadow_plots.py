@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description="Digital shadow plotter",
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-d", "--data-directory", help="location of the files for VisIt to load")
 parser.add_argument("-n", "--filename", default='solution_m0', help="base simulation filename")
-parser.add_argument("-r", "--rayfile", help="base simulation filename")
+parser.add_argument("-r", "--rayfile", help="full path to the rayfile that determines the camera angle")
 parser.add_argument("-o", "--output-directory", default='', help="location to write the images to")
 parser.add_argument("-t", "--num-iter", help="simulation iteration number")
 parser.add_argument("-e", "--experimental-data", action='store_true', help="plots experimental data on the simulation mesh")
@@ -21,7 +21,7 @@ num_iter = args.num_iter
 data_directory = args.data_directory
 output_directory = args.output_directory
 filename = data_directory + args.filename + '.' + str(num_iter) + '.pvtu'
-rayfile_filename = data_directory + args.rayfile
+rayfile_filename = args.rayfile
 
 # Extract the camera position from the rayfile
 with open(rayfile_filename, mode='r') as file:

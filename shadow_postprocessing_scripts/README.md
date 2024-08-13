@@ -22,7 +22,7 @@ Command line arguments:
 |--variability-time-series-plot |  | Flag to activate the plotting of time series of a point compared to previous prints| 
 |--point | -p | Point of interest for time series plots | 
 |--visit-path | | Path to the VisIt executable | 
-|--rayfile-filename | | Filename of the rayfile for VisIt to load to determine the view location | 
+|--rayfile-path | | Full path of the rayfile for VisIt to load to determine the view location | 
 |--print-index | | Index for the current print (used for comparing the results of different prints) |
 
 

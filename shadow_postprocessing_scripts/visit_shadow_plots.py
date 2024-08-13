@@ -2,6 +2,8 @@ import sys
 import os
 import argparse
 import csv
+import shutil
+import time
 
 # Setting up the argument parser
 parser = argparse.ArgumentParser(description="Digital shadow plotter",
@@ -67,12 +69,19 @@ if (args.experimental_data):
     ThresholdAtts.boundsInputType = 0
     ThresholdAtts.listedVarNames = ("temperature")
     ThresholdAtts.zonePortions = (1)
-    ThresholdAtts.lowerBounds = (5)
-    ThresholdAtts.upperBounds = (5000)
+    ThresholdAtts.lowerBounds = (-1e37)
+    ThresholdAtts.upperBounds = (1e37)
     ThresholdAtts.defaultVarName = "default"
     ThresholdAtts.defaultVarIsScalar = 0
-    ThresholdAtts.boundsRange = ("5:5000")
+    ThresholdAtts.boundsRange = ("-1e37:1e37")
     SetOperatorOptions(ThresholdAtts, -1, 0)
+
+    AddOperator("Isovolume", 1)
+    IsovolumeAtts = IsovolumeAttributes()
+    IsovolumeAtts.lbound = 5
+    IsovolumeAtts.ubound = 2000
+    IsovolumeAtts.variable = "temperature"
+    SetOperatorOptions(IsovolumeAtts, 0, 1)
 
     AddPlot("Subset", "domains", 1, 0)
     SubsetAtts = SubsetAttributes()
@@ -248,5 +257,7 @@ SaveWindowAtts.pixelData = 1
 
 SetSaveWindowAttributes(SaveWindowAtts)
 SaveWindow()
+
+shutil.copyfile(output_directory + output_filename + str(num_iter) + '.png', output_directory + output_filename + 'latest.png')
 
 sys.exit()

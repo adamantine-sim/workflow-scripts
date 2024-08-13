@@ -48,6 +48,7 @@ single_print_plot_filename = output_directory + 'single_point_ensemble.png'
 variability_plot_filename = output_directory + 'variability_single_point.png'
 saved_temperature_profile_filename = "mean_p"
 experiment_filename = adamantine_filename + '.expt'
+max_output_locations = 100
 
 
 # ----------------------------------------------------------
@@ -88,12 +89,31 @@ def get_iteration_count(path_prefix):
     return max_iteration_count
 
 # ----------------------------------------------------------
+# Check if the correct files exist for plots
+# ----------------------------------------------------------
+sim_pattern = path_to_adamantine_files + adamantine_filename + '.*.pvtu'
+files = glob.glob(sim_pattern)
+print(files)
+if len(files) == 0:
+    plot_sim_field = False
+    plot_single_time_series = False
+    plot_variability_time_series = False
+    print("No simulation files, skipping all simulation plots.")
+
+expt_pattern = path_to_adamantine_files + adamantine_filename + '.expt.*.pvtu'
+files = glob.glob(expt_pattern)
+print(files)
+if len(files) == 0:
+    plot_expt_field = False
+    print("No experimental files, skipping experimental temperature field plot.")
+
+# ----------------------------------------------------------
 # Generating the various types of plots
 # ----------------------------------------------------------
 
 # Get the time series data from VisIt, if needed
 if (plot_single_time_series or plot_variability_time_series):
-    visit_command = path_to_visit + ' -cli -nowin -s visit_single_point_time_series.py -d ' + path_to_adamantine_files + ' --output-directory ' + scratch_path + ' --output-filename ' + csv_filename + ' -p ' + point_of_interest + ' -n ' + adamantine_filename + ' --max-output ' + str(22) + ' -a --ensemble'
+    visit_command = path_to_visit + ' -cli -nowin -s visit_single_point_time_series.py -d ' + path_to_adamantine_files + ' --output-directory ' + scratch_path + ' --output-filename ' + csv_filename + ' -p ' + point_of_interest + ' -n ' + adamantine_filename + ' --max-output ' + str(max_output_locations) + ' -a --ensemble'
 
     print("VISIT COMMAND", visit_command)
 

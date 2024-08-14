@@ -1,7 +1,6 @@
 import sys
 import csv
 import argparse
-import numpy as np
 import os
 import glob
 
@@ -84,7 +83,7 @@ parser.add_argument("-o", "--output-directory", default='', help="location to wr
 parser.add_argument("--output-filename", default='time_series', help="filename to write the images to")
 parser.add_argument("-p", "--point", help="(x,y,z) point of interest")
 parser.add_argument("--skip", default=1, help="outputs to skip")
-parser.add_argument("--max-output", default=np.inf, help="maximum output to plot to")
+parser.add_argument("--max-output", default=1e100, help="maximum output to plot to")
 parser.add_argument("-a", '--append-existing', action='store_true', default=False, help="if the target CSV filename exists, append to it")
 parser.add_argument("--ensemble", action='store_true', default=False, help='whether the script should look for multiple ensemble members')
 args = parser.parse_args()
@@ -110,8 +109,8 @@ if ensemble:
     filename_pattern = data_directory + args.filename + "_m*.*.pvtu"
     list_of_ensemble_files = glob.glob(filename_pattern)
     # Now extract the bounds of the ensemble IDs
-    ensemble_id_min = np.inf
-    ensemble_id_max = -np.inf
+    ensemble_id_min = 1e100
+    ensemble_id_max = -1e100
     for f in list_of_ensemble_files:
         prefix = data_directory + args.filename + "_m"
         temp = f.replace(prefix,'')

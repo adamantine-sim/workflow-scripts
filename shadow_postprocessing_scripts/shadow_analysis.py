@@ -117,7 +117,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
             writer.writerows(rows)   
 
-        os.shutil.copy(mean_filename, output_directory + 'mean_p' + str(print_index) + '.csv') 
+        shutil.copy(mean_filename, output_directory + 'mean_p' + str(print_index) + '.csv') 
 
     # Plot the mean and standard deviation for the temperature of a single print
     if plot_single_time_series:

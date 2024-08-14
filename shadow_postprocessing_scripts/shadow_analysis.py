@@ -63,7 +63,6 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
     # ----------------------------------------------------------
     sim_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.pvtu'
     files = glob.glob(sim_pattern)
-    print(files)
     if len(files) < 2:
         plot_sim_field = False
         plot_single_time_series = False
@@ -72,7 +71,6 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
     expt_pattern = path_to_adamantine_files + adamantine_filename + '.expt.*.pvtu'
     files = glob.glob(expt_pattern)
-    print(files)
     if len(files) == 0:
         plot_expt_field = False
         print("No experimental files, skipping experimental temperature field plot.")

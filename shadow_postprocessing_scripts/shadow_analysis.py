@@ -8,14 +8,14 @@ import csv
 import os
 import glob
 
-def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, point_of_interest, path_to_visit, rayfile, print_index):
+def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, previous_print_profile_prefix, point_of_interest, path_to_visit, rayfile, print_index):
 
     # Some hard-coded variables that we may want to open up to users
     scratch_path = '.'
     csv_filename = 'time_series'
     single_print_plot_filename = output_directory + 'single_point_ensemble.png'
     variability_plot_filename = output_directory + 'variability_single_point.png'
-    saved_temperature_profile_filename = "mean_p"
+    saved_temperature_profile_filename = previous_print_profile_prefix
     experiment_filename = adamantine_filename + '.expt'
     max_output_locations = 100
 
@@ -109,7 +109,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         std_dev = data.std(axis=1)
         mean = data.mean(axis=1)    
 
-        mean_filename = 'mean_p' + str(print_index) + '.csv'
+        mean_filename = output_directory + 'mean_p' + str(print_index) + '.csv'
         with open(mean_filename, 'w', newline='') as file:
             writer = csv.writer(file)
             

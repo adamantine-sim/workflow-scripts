@@ -37,7 +37,8 @@ def write_time_series(filename, max_output, append_file, output_path, skip, vari
 
                 start_state = num_lines - 1
 
-    
+    print("START_STATE", start_state, "END_STATE", end_state)
+
     for n in range(start_state, end_state, skip):
         SetTimeSliderState(n)
 
@@ -121,7 +122,6 @@ if ensemble:
         ensemble_id_min = min(ensemble_id_min, ensemble_id)
         ensemble_id_max = max(ensemble_id_max, ensemble_id)
 
-
     if (ensemble_id_min is not 0):
         print("Error: unexpected ensemble members, no 0 member")
         sys.exit()
@@ -137,7 +137,7 @@ if ensemble:
 
 else:
     filename = data_directory + args.filename + '.*.pvtu'
-    output_path = output_path + ".csv"
+    output_path = base_output_path + ".csv"
     write_time_series(filename, max_output, append, output_path, skip, variable, point)
 
 sys.exit()

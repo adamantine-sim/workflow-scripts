@@ -7,6 +7,8 @@ from scipy.interpolate import PchipInterpolator
 import csv
 import os
 import glob
+import shutil
+import shlex
 
 def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, previous_print_data_path, point_of_interest, path_to_visit, rayfile, print_index):
 
@@ -16,6 +18,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
     single_print_plot_filename = output_directory + 'single_point_ensemble.png'
     variability_plot_filename = output_directory + 'variability_single_point.png'
     experiment_filename = adamantine_filename + '.expt'
+    saved_previous_temperature_prefix = "mean_p"
     max_output_locations = 100
 
     this_file_path = os.path.dirname(os.path.realpath(__file__))
@@ -68,7 +71,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         plot_variability_time_series = False
         print("No simulation files, skipping all simulation plots.")
 
-    expt_pattern = path_to_adamantine_files + adamantine_filename + '.expt.*.pvtu'
+    expt_pattern = path_to_adamantine_files + experiment_filename + '.*.pvtu'
     files = glob.glob(expt_pattern)
     if len(files) == 0:
         plot_expt_field = False
@@ -82,9 +85,9 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
     if (plot_single_time_series or plot_variability_time_series):
         visit_command = path_to_visit + ' -cli -nowin -s ' + this_file_path + '/visit_single_point_time_series.py -d ' + path_to_adamantine_files + ' --output-directory ' + scratch_path + ' --output-filename ' + csv_filename + ' -p ' + point_of_interest + ' -n ' + adamantine_filename + ' --max-output ' + str(max_output_locations) + ' -a --ensemble'
 
-        print("VISIT COMMAND", visit_command)
+        #print("VISIT COMMAND", visit_command)
 
-        subprocess.run(visit_command, shell=True)
+        subprocess.run(shlex.split(visit_command))
 
         data = pd.DataFrame()
         time = pd.DataFrame()
@@ -108,7 +111,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         std_dev = data.std(axis=1)
         mean = data.mean(axis=1)    
 
-        mean_filename = scratch_path + 'mean_p' + str(print_index) + '.csv'
+        mean_filename = output_directory + saved_previous_temperature_prefix + str(print_index) + '.csv'
         with open(mean_filename, 'w', newline='') as file:
             writer = csv.writer(file)
             
@@ -116,8 +119,6 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             rows = zip(time['time (s)'], mean)
 
             writer.writerows(rows)   
-
-        shutil.copy(mean_filename, output_directory + 'mean_p' + str(print_index) + '.csv') 
 
     # Plot the mean and standard deviation for the temperature of a single print
     if plot_single_time_series:
@@ -154,14 +155,11 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         files = os.listdir(previous_print_data_path)
 
         for f in files:
-            if f.startswith("mean_p"):
-                index = int((f.strip("mean_p")).strip('.csv'))
-                df = pd.read_csv(f)
+            if f.startswith(saved_previous_temperature_prefix):
+                index = int((f.strip(saved_previous_temperature_prefix)).strip('.csv'))
+                df = pd.read_csv(previous_print_data_path + f)
 
                 merged_data[index] = df
-
-        df = pd.read_csv(scratch_path + 'mean_p' + str(print_index) + '.csv')
-        merged_data[print_index] = df
 
         # Plot the data
         fig, ax = plt.subplots()
@@ -174,16 +172,19 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             color = 'C' + str(key)
 
             alpha = 0.2
-            if key == print_index:
-                alpha = 1.0
-                color = 'k'
 
             plt.plot(value['time (s)'], value['temperature (K)'], '.', color=color, alpha=alpha, label=str(key))
             plt.plot(t_spline, m_spline, '-', alpha=alpha, color=color)
 
+        
+        spline_model_mean = PchipInterpolator(time['time (s)'], mean)
+        t_spline = np.linspace(time['time (s)'].min(), time['time (s)'].max(), 500)
+        m_spline = spline_model_mean(t_spline)
+
+        plt.plot(time['time (s)'], mean, '.', color='k', alpha=1.0, label='current print')
+        plt.plot(t_spline, m_spline, '-', alpha=1.0, color='k')
 
         #plt.legend(ncol=1)
-
         plt.xlabel("Time (s)")
         plt.ylabel("Temperature (K)")
         fig.set_figwidth(fWidth)
@@ -198,9 +199,9 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
         visit_command = path_to_visit + ' -cli -nowin -s ' + this_file_path + '/visit_shadow_plots.py -d ' + path_to_adamantine_files + ' --output-directory ' + output_directory + " -t " + str(iteration_number) + ' -r ' + rayfile + ' -n ' + sim_filename
 
-        print("VISIT COMMAND", visit_command)
+        #print("VISIT COMMAND", visit_command)
+        subprocess.run(shlex.split(visit_command))
 
-        subprocess.run(visit_command, shell=True)
 
     # Plot the most recent experimental data on the simulation mesh
     if plot_expt_field:
@@ -208,8 +209,9 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
         visit_command = path_to_visit + ' -cli -nowin -s ' + this_file_path + '/visit_shadow_plots.py -d ' + path_to_adamantine_files + ' --output-directory ' + output_directory + " -t " + str(iteration_number) + ' -r ' + rayfile + ' -n ' + experiment_filename + ' -e '
 
-        print("VISIT COMMAND", visit_command)
+        #print("VISIT COMMAND", visit_command)
+        subprocess.run(shlex.split(visit_command))
 
-        subprocess.run(visit_command, shell=True)
+
 
 

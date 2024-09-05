@@ -122,6 +122,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
             # Now get the time series
             temperature_list = []
+            time_list = []
             for t in times:
                 dataset = pyvista.read(path_to_adamantine_files + adamantine_filename + "_m" + str(e) + '.' + str(t) + '.pvtu')
                 dataset.set_active_scalars(variable)
@@ -132,11 +133,22 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
                 temperature = array[dsp]
                 temperature_list.append(temperature)
 
+                # Read the simulated time (not the iteration number) from the VTK files
+                f_path = path_to_adamantine_files + adamantine_filename + "_m" + str(e) + '.' + str(t) + '.0.vtu'
+                with open(f_path, 'r') as file:
+                    for i, line in enumerate(file):
+                        if i == 8:  
+
+                            start_tag_end = line.find('>') + 1  # Position right after the opening tag
+                            end_tag_start = line.find('</', start_tag_end)  # Position of the closing tag
+                            time_entry = float(line[start_tag_end:end_tag_start].strip())
+                            time_list.append(time_entry)
+                            break
+
             # Put the data into a pandas dataframe
-            
             data_df['temperature m' + str(e)] = temperature_list
 
-        time_df['time (s)'] = times
+        time_df['time (s)'] = time_list
 
         std_dev = data_df.std(axis=1)
         mean = data_df.mean(axis=1)    

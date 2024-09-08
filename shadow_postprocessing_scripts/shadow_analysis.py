@@ -66,23 +66,198 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
     # ----------------------------------------------------------
     # Check if the correct files exist for plots
     # ----------------------------------------------------------
+
+    # Skip field plots if there are no rayfiles to give the camera position
+    if plot_sim_field or plot_expt_field:
+        if not os.path.exists(rayfile):
+            plot_sim_field = False
+            plot_expt_field = False
+        else:
+            # Check that the rayfile isn't still being written
+            current_epoch_time = time.time()
+            buffer_time = 0.5
+            mod_time = os.path.getmtime(rayfile)
+            if (current_epoch_time - mod_time) < buffer_time:
+                plot_sim_field = False
+                plot_expt_field = False
+
+    # Skip field plots if there are no simulation files
+    if (plot_sim_field):
+        sim_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.pvtu'
+        files = glob.glob(sim_pattern)
+        
+        # Skip field plots if there are no simulation files
+        if len(files) < 1:
+            plot_sim_field = False
+            print("No simulation files, skipping all simulation plots.")
+
+    if (plot_expt_field):
+        # Skip projected observations until experiment files exist
+        expt_pattern = path_to_adamantine_files + experiment_filename + '.*.pvtu'
+        files = glob.glob(expt_pattern)
+        if len(files) == 0:
+            plot_expt_field = False
+            print("No experimental files, skipping experimental temperature field plot.")
+
+    # Skip time series plots until there are two simulation files
     sim_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.pvtu'
     files = glob.glob(sim_pattern)
     if len(files) < 2:
-        plot_sim_field = False
         plot_single_time_series = False
         plot_variability_time_series = False
-        print("No simulation files, skipping all simulation plots.")
-
-    expt_pattern = path_to_adamantine_files + experiment_filename + '.*.pvtu'
-    files = glob.glob(expt_pattern)
-    if len(files) == 0:
-        plot_expt_field = False
-        print("No experimental files, skipping experimental temperature field plot.")
+        print("Not enough files for time series, skipping all time series plots.")
 
     # ----------------------------------------------------------
     # Generating the various types of plots
     # ----------------------------------------------------------
+
+    # Plot the most recent simulation result
+    if plot_sim_field:
+        # Extract the camera position from the rayfile
+        with open(rayfile, mode='r') as file:
+            reader = csv.reader(file)
+            next(reader)  # Skip the header line
+            second_line = next(reader)  # Read the second line
+
+        view_from_rayfile_string = second_line[:3]
+        view_from_rayfile = [float(x) for x in view_from_rayfile_string]
+
+        direction_from_rayfile_string = second_line[3:6]
+        direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
+
+        view = tuple(view_from_rayfile)
+        view_up = (0, 0, 1)
+        direction = tuple(direction_from_rayfile)
+
+        pyvista.start_xvfb()
+        pl = pyvista.Plotter()
+
+        # Auto-detect the number of MPI domains
+        filename_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.*.vtu'
+
+        # Get the list of MPI ranks and sort them
+        list_of_mpi_ranks = glob.glob(filename_pattern)
+        raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
+        ranks = sorted(set(raw_ranks))
+        mpi_domains = max(raw_ranks) + 1
+
+        for i in range(0,mpi_domains):
+            sim_filename = adamantine_filename + '_m0'
+            iteration_number = get_iteration_count(path_to_adamantine_files + sim_filename)
+
+            file_to_plot = path_to_adamantine_files + sim_filename + '.' + str(iteration_number) + '.' + str(i) + '.vtu'
+
+            # Ensure that file is done being written
+            writing_done = False
+            buffer_time = 0.5
+            while not writing_done:
+                current_epoch_time = time.time()
+                mod_time = os.path.getmtime(rayfile)
+
+                if (current_epoch_time - mod_time) < buffer_time:
+                    print("Waiting, " + file_to_plot + " is still being modified")
+                    time.sleep(0.5)
+                else:
+                    writing_done = True
+
+            dataset = pyvista.read(file_to_plot)
+            dataset.set_active_scalars("temperature")
+
+            #bounds = dataset.bounds
+            #bounding_box_diagonal = np.sqrt( (bounds[0]-bounds[3])**2 + (bounds[1]-bounds[4])**2 + (bounds[2]-bounds[5])**2 )
+            bounding_box_diagonal = 0.4
+            focal_point = []
+            for i in range(0, len(direction)):
+                focal_point.append(view[i] + bounding_box_diagonal * direction[i])
+            focal_point = tuple(focal_point)
+
+            threshed = dataset.threshold([5, 10000])
+
+            pl.add_mesh(threshed, show_edges=True, cmap='plasma', clim=[0,1700])
+
+        pl.camera.position = view
+        pl.camera.viewup = view_up
+        pl.camera.focal_point = focal_point
+
+        pl.save_graphic(output_directory + "simulation_temperature_" + str(iteration_number) + ".pdf")
+        shutil.copyfile(output_directory + "simulation_temperature_" + str(iteration_number) + ".pdf", output_directory + "simulation_temperature_latest.pdf")  
+
+
+    # Plot the most recent experimental data on the simulation mesh
+    if plot_expt_field:
+        
+        # Extract the camera position from the rayfile
+        with open(rayfile, mode='r') as file:
+            reader = csv.reader(file)
+            next(reader)  # Skip the header line
+            second_line = next(reader)  # Read the second line
+
+        view_from_rayfile_string = second_line[:3]
+        view_from_rayfile = [float(x) for x in view_from_rayfile_string]
+
+        direction_from_rayfile_string = second_line[3:6]
+        direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
+
+
+        view = tuple(view_from_rayfile)
+        view_up = (0, 0, 1)
+        direction = tuple(direction_from_rayfile)
+        
+        pyvista.start_xvfb()
+        pl = pyvista.Plotter()
+
+        # Get the list of time steps and sort them
+        list_of_mpi_ranks = glob.glob(filename_pattern)
+        raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
+        ranks = sorted(set(raw_ranks))
+        mpi_domains = max(raw_ranks) + 1
+
+        for i in range(0,mpi_domains):
+            sim_filename = adamantine_filename + '.expt'
+            iteration_number = get_iteration_count(path_to_adamantine_files + sim_filename)
+
+            file_to_plot = path_to_adamantine_files + sim_filename + '.' + str(iteration_number) + '.' + str(i) + '.vtu'
+
+            # Ensure that file is done being written
+            writing_done = False
+            buffer_time = 0.5
+            while not writing_done:
+                current_epoch_time = time.time()
+                mod_time = os.path.getmtime(rayfile)
+
+                if (current_epoch_time - mod_time) < buffer_time:
+                    print("Waiting, " + file_to_plot + " is still being modified")
+                    time.sleep(0.5)
+                else:
+                    writing_done = True
+
+            dataset = pyvista.read(file_to_plot)
+
+            #bounds = dataset.bounds
+            #bounding_box_diagonal = np.sqrt( (bounds[0]-bounds[3])**2 + (bounds[1]-bounds[4])**2 + (bounds[2]-bounds[5])**2 )
+            bounding_box_diagonal = 0.4
+            focal_point = []
+            for i in range(0, len(direction)):
+                focal_point.append(view[i] + bounding_box_diagonal * direction[i])
+            focal_point = tuple(focal_point)
+
+            # This shows the mesh
+            pl.add_mesh(dataset, show_edges=True, color='w')
+
+            dataset.set_active_scalars("temperature")
+
+            # Now I want to find points of interest
+            ps = dataset.cast_to_pointset()
+            tps = ps.threshold([0, 100000])
+            if (len(tps.points) > 0):
+                pl.add_points(tps, render_points_as_spheres=True, point_size=10.0, cmap='plasma', clim=[0,1700])
+
+        pl.camera.position = view
+        pl.camera.viewup = view_up
+        pl.camera.focal_point = focal_point
+
+        pl.save_graphic(output_directory + "experimental_temperature_" + str(iteration_number) + ".pdf")
+        shutil.copyfile(output_directory + "experimental_temperature_" + str(iteration_number) + ".pdf", output_directory + "experimental_temperature_latest.pdf")  
 
     # Get the time series data from VisIt, if needed
     if (plot_single_time_series or plot_variability_time_series):
@@ -113,11 +288,18 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
         filename_ts_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.pvtu'
 
-        # Get the list of time steps and sort them
+        # Get the list of time steps and sort them, need to ensure that files are finished writing
         list_of_member_time_step_files = glob.glob(filename_ts_pattern)
-        times = [int(os.path.basename(f).split('.')[1]) for f in list_of_member_time_step_files]
-        times.sort()
+        current_epoch_time = time.time()
+        buffer_time = 1.0
+        times = []
+        for f in list_of_member_time_step_files:
+            mod_time = os.path.getmtime(f)
+            if (current_epoch_time - mod_time)  > buffer_time:
+                times.append(int(os.path.basename(f).split('.')[1]))
 
+        times.sort()
+ 
         for e in range(ensemble_id_min, ensemble_id_max+1):
 
             # Now get the time series
@@ -233,129 +415,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         fig.set_figheight(fHeight)
         plt.savefig(variability_plot_filename, format='png')
 
-    # Plot the most recent simulation result
-    if plot_sim_field:
-        # Extract the camera position from the rayfile
-        with open(rayfile, mode='r') as file:
-            reader = csv.reader(file)
-            next(reader)  # Skip the header line
-            second_line = next(reader)  # Read the second line
-
-        view_from_rayfile_string = second_line[:3]
-        view_from_rayfile = [float(x) for x in view_from_rayfile_string]
-
-        direction_from_rayfile_string = second_line[3:6]
-        direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
-
-
-        view = tuple(view_from_rayfile)
-        view_up = (0, 0, 1)
-        direction = tuple(direction_from_rayfile)
-
-        # NEW WAY WITH PYVISTA
-        pyvista.start_xvfb()
-        pl = pyvista.Plotter()
-
-        # Auto-detect the number of MPI domains
-        filename_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.*.vtu'
-
-        # Get the list of time steps and sort them
-        list_of_mpi_ranks = glob.glob(filename_pattern)
-        raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
-        ranks = sorted(set(raw_ranks))
-        mpi_domains = max(raw_ranks) + 1
-
-        for i in range(0,mpi_domains):
-            sim_filename = adamantine_filename + '_m0'
-            iteration_number = get_iteration_count(path_to_adamantine_files + sim_filename)
-
-            file_to_plot = path_to_adamantine_files + sim_filename + '.' + str(iteration_number) + '.' + str(i) + '.vtu'
-
-            dataset = pyvista.read(file_to_plot)
-            dataset.set_active_scalars("temperature")
-
-            #bounds = dataset.bounds
-            #bounding_box_diagonal = np.sqrt( (bounds[0]-bounds[3])**2 + (bounds[1]-bounds[4])**2 + (bounds[2]-bounds[5])**2 )
-            bounding_box_diagonal = 0.4
-            focal_point = []
-            for i in range(0, len(direction)):
-                focal_point.append(view[i] + bounding_box_diagonal * direction[i])
-            focal_point = tuple(focal_point)
-
-            threshed = dataset.threshold([5, 10000])
-
-            pl.add_mesh(threshed, show_edges=True, cmap='plasma', clim=[0,1700])
-
-        pl.camera.position = view
-        pl.camera.viewup = view_up
-        pl.camera.focal_point = focal_point
-
-        pl.save_graphic(output_directory + "simulation_temperature_" + str(iteration_number) + ".pdf")
-        shutil.copyfile(output_directory + "simulation_temperature_" + str(iteration_number) + ".pdf", output_directory + "simulation_temperature_latest.pdf")  
-
-
-    # Plot the most recent experimental data on the simulation mesh
-    if plot_expt_field:
-        
-        # Extract the camera position from the rayfile
-        with open(rayfile, mode='r') as file:
-            reader = csv.reader(file)
-            next(reader)  # Skip the header line
-            second_line = next(reader)  # Read the second line
-
-        view_from_rayfile_string = second_line[:3]
-        view_from_rayfile = [float(x) for x in view_from_rayfile_string]
-
-        direction_from_rayfile_string = second_line[3:6]
-        direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
-
-
-        view = tuple(view_from_rayfile)
-        view_up = (0, 0, 1)
-        direction = tuple(direction_from_rayfile)
-        
-        pyvista.start_xvfb()
-        pl = pyvista.Plotter()
-
-    # Get the list of time steps and sort them
-        list_of_mpi_ranks = glob.glob(filename_pattern)
-        raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
-        ranks = sorted(set(raw_ranks))
-        mpi_domains = max(raw_ranks) + 1
-
-        for i in range(0,mpi_domains):
-            sim_filename = adamantine_filename + '.expt'
-            iteration_number = get_iteration_count(path_to_adamantine_files + sim_filename)
-
-            file_to_plot = path_to_adamantine_files + sim_filename + '.' + str(iteration_number) + '.' + str(i) + '.vtu'
-
-            dataset = pyvista.read(file_to_plot)
-
-            #bounds = dataset.bounds
-            #bounding_box_diagonal = np.sqrt( (bounds[0]-bounds[3])**2 + (bounds[1]-bounds[4])**2 + (bounds[2]-bounds[5])**2 )
-            bounding_box_diagonal = 0.4
-            focal_point = []
-            for i in range(0, len(direction)):
-                focal_point.append(view[i] + bounding_box_diagonal * direction[i])
-            focal_point = tuple(focal_point)
-
-            # This shows the mesh
-            pl.add_mesh(dataset, show_edges=True, color='w')
-
-            dataset.set_active_scalars("temperature")
-
-            # Now I want to find points of interest
-            ps = dataset.cast_to_pointset()
-            tps = ps.threshold([0, 100000])
-            if (len(tps.points) > 0):
-                pl.add_points(tps, render_points_as_spheres=True, point_size=10.0, cmap='plasma', clim=[0,1700])
-
-        pl.camera.position = view
-        pl.camera.viewup = view_up
-        pl.camera.focal_point = focal_point
-
-        pl.save_graphic(output_directory + "experimental_temperature_" + str(iteration_number) + ".pdf")
-        shutil.copyfile(output_directory + "experimental_temperature_" + str(iteration_number) + ".pdf", output_directory + "experimental_temperature_latest.pdf")  
+    
 
 
 

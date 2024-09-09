@@ -12,7 +12,7 @@ import shlex
 import pyvista
 import time
 
-def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, previous_print_data_path, point_of_interest, path_to_visit, rayfile, print_index):
+def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, previous_print_data_path, point_of_interest, path_to_visit, rayfile, print_index, plotting_temperature_range):
 
     time_preamble_start = time.perf_counter()
     
@@ -175,8 +175,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             print("n_cells", threshed.n_cells, "n_points", threshed.n_points)
 
             if threshed.n_cells > 0:
-                pl.add_mesh(threshed, show_edges=True, cmap='plasma', clim=[0,1700])
-                #pl.add_mesh(dataset, show_edges=True, cmap='plasma')
+                pl.add_mesh(threshed, show_edges=True, cmap='plasma', clim=eval(eval(plotting_temperature_range)))
             else:
                 print("WARNING: ALL DATA THRESHOLDED OUT FOR SIMULATION RESULT PLOT, MESH WILL BE PRINTED AS GREEN")
                 pl.add_mesh(dataset, show_edges=True, color='g')
@@ -257,9 +256,9 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
             # Now I want to find points of interest
             ps = dataset.cast_to_pointset()
-            tps = ps.threshold([-1000, 100000])
+            tps = ps.threshold([5., 100000])
             if (len(tps.points) > 0):
-                pl.add_points(tps, render_points_as_spheres=True, point_size=10.0, cmap='plasma', clim=[0,1700])
+                pl.add_points(tps, render_points_as_spheres=True, point_size=10.0, cmap='plasma', clim=eval(eval(plotting_temperature_range)))
 
         # I want the view angle from the camera, but I want to be closer. I'm going to pick the view angle to be the 
         # same camera distance as the auto choice, but going backward from the origin to the camera location.

@@ -101,14 +101,13 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             plot_expt_field = False
             print("No experimental files, skipping experimental temperature field plot.")
 
-    # Skip time series plots until there are two simulation files
+    # Skip time series plots until there is at least one simulation files
     sim_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.pvtu'
     files = glob.glob(sim_pattern)
-    if len(files) < 2:
+    if len(files) < 1:
         plot_single_time_series = False
         plot_variability_time_series = False
         print("Not enough files for time series, skipping all time series plots.")
-
 
     time_preable_end = time.perf_counter()
 
@@ -171,8 +170,6 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             dataset.set_active_scalars("temperature")
 
             threshed = dataset.threshold([5, 10000])
-
-            print("n_cells", threshed.n_cells, "n_points", threshed.n_points)
 
             if threshed.n_cells > 0:
                 pl.add_mesh(threshed, show_edges=True, cmap='plasma', clim=eval(eval(plotting_temperature_range)))
@@ -368,21 +365,24 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
     # Plot the mean and standard deviation for the temperature of a single print
     if plot_single_time_series:
         fig, ax = plt.subplots()
-        spline_model_mean = PchipInterpolator(time_df['time (s)'], mean)
-        spline_model_std_dev = PchipInterpolator(time_df['time (s)'], std_dev)
+        
+        if len(time_df['time (s)']) > 1:
+            spline_model_mean = PchipInterpolator(time_df['time (s)'], mean)
+            spline_model_std_dev = PchipInterpolator(time_df['time (s)'], std_dev)
 
 
-        t_spline = np.linspace(time_df['time (s)'].min(), time_df['time (s)'].max(), 500)
-        m_spline = spline_model_mean(t_spline)
-        sd_spline = spline_model_std_dev(t_spline)
+            t_spline = np.linspace(time_df['time (s)'].min(), time_df['time (s)'].max(), 500)
+            m_spline = spline_model_mean(t_spline)
+            sd_spline = spline_model_std_dev(t_spline)
 
-        coeff = 2.0
-        upper_bound_spline = m_spline + coeff * sd_spline
-        lower_bound_spline = m_spline - coeff * sd_spline
+            coeff = 2.0
+            upper_bound_spline = m_spline + coeff * sd_spline
+            lower_bound_spline = m_spline - coeff * sd_spline
 
 
-        plt.plot(t_spline, m_spline, 'k-', label='mean')
-        ax.fill_between(t_spline, upper_bound_spline, lower_bound_spline, alpha=0.5, label='2 std. dev.')
+            plt.plot(t_spline, m_spline, 'k-', label='mean')
+            ax.fill_between(t_spline, upper_bound_spline, lower_bound_spline, alpha=0.5, label='2 std. dev.')
+        
         plt.plot(time_df['time (s)'], mean, 'k.')
 
         plt.legend(ncol=1)
@@ -410,24 +410,26 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         fig, ax = plt.subplots()
 
         for key, value in merged_data.items():
-            spline_model_mean = PchipInterpolator(value['time (s)'], value['temperature (K)'])
-            t_spline = np.linspace(value['time (s)'].min(), value['time (s)'].max(), 500)
-            m_spline = spline_model_mean(t_spline)
-
             color = 'C' + str(key)
-
             alpha = 0.2
 
             plt.plot(value['time (s)'], value['temperature (K)'], '.', color=color, alpha=alpha, label=str(key))
-            plt.plot(t_spline, m_spline, '-', alpha=alpha, color=color)
+
+            if len(value['temperature (K)']) > 1:
+                spline_model_mean = PchipInterpolator(value['time (s)'], value['temperature (K)'])
+                t_spline = np.linspace(value['time (s)'].min(), value['time (s)'].max(), 500)
+                m_spline = spline_model_mean(t_spline)
+                plt.plot(t_spline, m_spline, '-', alpha=alpha, color=color)
 
         
-        spline_model_mean = PchipInterpolator(time_df['time (s)'], mean)
-        t_spline = np.linspace(time_df['time (s)'].min(), time_df['time (s)'].max(), 500)
-        m_spline = spline_model_mean(t_spline)
-
         plt.plot(time_df['time (s)'], mean, '.', color='k', alpha=1.0, label='current print')
-        plt.plot(t_spline, m_spline, '-', alpha=1.0, color='k')
+
+        if len(time_df['time (s)']) > 1:
+            spline_model_mean = PchipInterpolator(time_df['time (s)'], mean)
+            t_spline = np.linspace(time_df['time (s)'].min(), time_df['time (s)'].max(), 500)
+            m_spline = spline_model_mean(t_spline)
+
+            plt.plot(t_spline, m_spline, '-', alpha=1.0, color='k')
 
         #plt.legend(ncol=1)
         plt.xlabel("Time (s)")

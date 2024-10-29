@@ -300,7 +300,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             ensemble_id_min = min(ensemble_id_min, ensemble_id)
             ensemble_id_max = max(ensemble_id_max, ensemble_id)
 
-        if (ensemble_id_min is not 0):
+        if (ensemble_id_min != 0):
             print("Error: unexpected ensemble members, no 0 member")
             sys.exit()
 

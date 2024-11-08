@@ -5,6 +5,11 @@ import glob
 from scipy.spatial import KDTree
 
 def merge_mpi_decomposition(file1):
+    """
+    At one point I thought that I needed to merge the data from the individual ranks by hand. It turns out
+    that I don't need to. I'm keeping this code here for now, but it can probably be safely deleted.
+    """
+
     # We need to loop over each of the MPI domains
     filename_pattern = file1 + '.*.vtu'
     list_of_mpi_rank_files = glob.glob(filename_pattern)
@@ -57,13 +62,31 @@ def merged_field_variable_comparison(dataset1, dataset2, field_name):
     
     return total_diff
 
-    
+def pvtu_field_variable_comparison(file1, file2, field_name):
+
+    full_filename1 = file1 + ".pvtu"
+    dataset1 = pyvista.read(full_filename1)
+    dataset1.set_active_scalars(field_name)
+
+    full_filename2 = file2 + ".pvtu"
+    dataset2 = pyvista.read(full_filename2)
+    dataset2.set_active_scalars(field_name)
+
+    pyvista.start_xvfb()
+    pl = pyvista.Plotter()
+    pl.add_mesh(dataset1, show_edges=True, cmap='plasma')
+    #pl.show()
+    #pl.save_graphic("field1_out.pdf")
+
+    diff = merged_field_variable_comparison(dataset1, dataset2, field_name)
+
+
+    return diff    
 
 
 def field_variable_comparison(file1, file2, field_name):
-    dataset1 = merge_mpi_decomposition(file1)
-    dataset2 = merge_mpi_decomposition(file2)
-    diff = merged_field_variable_comparison(dataset1, dataset2, field_name)
+    
+    diff = pvtu_field_variable_comparison(file1, file2, field_name)
 
     return diff
 

@@ -12,7 +12,8 @@ import shlex
 import pyvista
 import time
 
-def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, previous_print_data_path, point_of_interest, path_to_visit, rayfile, print_index, plotting_temperature_range):
+def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, plot_variability_time_series, path_to_adamantine_files, adamantine_filename, output_directory, previous_print_data_path, point_of_interest, rayfile, print_index, plotting_temperature_range):
+    print("Performing shadow analysis...")
 
     time_preamble_start = time.perf_counter()
     
@@ -120,6 +121,8 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
     time_sim_field_start = time.perf_counter()
 
     if plot_sim_field:
+        print("Plotting the simulation result...")
+
         # Extract the camera position from the rayfile
         with open(rayfile, mode='r') as file:
             reader = csv.reader(file)

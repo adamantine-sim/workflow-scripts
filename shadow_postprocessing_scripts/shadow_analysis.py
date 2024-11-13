@@ -251,11 +251,12 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
                         writing_done = True
 
                 dataset = pyvista.read(file_to_plot)
+                dataset.set_active_scalars("temperature")
+
+                thresh = dataset.threshold([5., np.inf])
 
                 # This shows the mesh
-                pl.add_mesh(dataset, show_edges=True, color='w')
-
-                dataset.set_active_scalars("temperature")
+                pl.add_mesh(thresh, show_edges=True, color='w')
 
                 # Now I want to find points of interest
                 ps = dataset.cast_to_pointset()

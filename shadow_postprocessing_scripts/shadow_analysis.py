@@ -122,9 +122,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         # Plot the most recent simulation result
         time_sim_field_start = time.perf_counter()
 
-        if plot_sim_field:
-            print("Plotting the simulation result...")
-
+        if plot_sim_field or plot_expt_field:
             # Extract the camera position from the rayfile
             with open(rayfile, mode='r') as file:
                 reader = csv.reader(file)
@@ -140,18 +138,19 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             view = tuple(view_from_rayfile)
             direction = tuple(direction_from_rayfile)
 
+            # Auto-detect the number of MPI domains
+            filename_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.*.vtu'   
+            list_of_mpi_ranks = glob.glob(filename_pattern)
+            raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
+            mpi_domains = max(raw_ranks) + 1
+
+        if plot_sim_field:
+            print("Plotting the simulation result...")
+
             pyvista.start_xvfb()
             pl = pyvista.Plotter()
 
-            # Auto-detect the number of MPI domains
-            filename_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.*.vtu'
-
-            # Get the list of MPI ranks and sort them
-            list_of_mpi_ranks = glob.glob(filename_pattern)
-            raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
-            ranks = sorted(set(raw_ranks))
-            mpi_domains = max(raw_ranks) + 1
-
+            # Get the list of time steps and sort them            
             for i in range(0,mpi_domains):
                 sim_filename = adamantine_filename + '_m0'
                 iteration_number = get_iteration_count(path_to_adamantine_files + sim_filename)
@@ -160,7 +159,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
                 # Ensure that file is done being written
                 writing_done = False
-                buffer_time = 0.5
+                buffer_time = 0.1
                 while not writing_done:
                     current_epoch_time = time.time()
                     mod_time = os.path.getmtime(rayfile)
@@ -182,7 +181,6 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
                     print("WARNING: ALL DATA THRESHOLDED OUT FOR SIMULATION RESULT PLOT, MESH WILL BE PRINTED AS GREEN")
                     pl.add_mesh(dataset, show_edges=True, color='g')
 
-            
             # I want the view angle from the camera, but I want to be closer. I'm going to pick the view angle to be the 
             # same camera distance as the auto choice, but going backward from the origin to the camera location.
 
@@ -192,7 +190,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             direction = direction / actual_distance
             view_distance = 0.0 * distance_auto + 1.0 * actual_distance
             camera_position_new = (direction[0]*view_distance, direction[1]*view_distance, direction[2]*view_distance)
-
+            
             pl.camera.position = tuple(camera_position_new)
             pl.camera.focal_point = (0, 0, 0)
             pl.camera.zoom(plotting_zoom)
@@ -207,29 +205,10 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
         if plot_expt_field:
             
-            # Extract the camera position from the rayfile
-            with open(rayfile, mode='r') as file:
-                reader = csv.reader(file)
-                next(reader)  # Skip the header line
-                second_line = next(reader)  # Read the second line
-
-            view_from_rayfile_string = second_line[:3]
-            view_from_rayfile = [float(x) for x in view_from_rayfile_string]
-
-            direction_from_rayfile_string = second_line[3:6]
-            direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
-
-            view = tuple(view_from_rayfile)
-            direction = tuple(direction_from_rayfile)
-            
             pyvista.start_xvfb()
             pl = pyvista.Plotter()
 
             # Get the list of time steps and sort them
-            list_of_mpi_ranks = glob.glob(filename_pattern)
-            raw_ranks = [int(os.path.basename(f).split('.')[2]) for f in list_of_mpi_ranks]
-            ranks = sorted(set(raw_ranks))
-            mpi_domains = max(raw_ranks) + 1
 
             for i in range(0,mpi_domains):
                 sim_filename = adamantine_filename + '.expt'
@@ -239,7 +218,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
                 # Ensure that file is done being written
                 writing_done = False
-                buffer_time = 1.0
+                buffer_time = 0.1
                 while not writing_done:
                     current_epoch_time = time.time()
                     mod_time = os.path.getmtime(rayfile)
@@ -274,10 +253,10 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             view_distance = 0.0 * distance_auto + 1.0 * actual_distance
             camera_position_new = (direction[0]*view_distance, direction[1]*view_distance, direction[2]*view_distance)
 
+
             pl.camera.position = tuple(camera_position_new)
             pl.camera.focal_point = (0, 0, 0)
             pl.camera.zoom(plotting_zoom)
-
 
             pl.save_graphic(output_directory + "experimental_temperature_" + str(iteration_number) + ".pdf")
             shutil.copyfile(output_directory + "experimental_temperature_" + str(iteration_number) + ".pdf", output_directory + "experimental_temperature_latest.pdf")  
@@ -293,7 +272,6 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             time_df = pd.DataFrame()
 
             # Find the ensemble members
-            
             filename_pattern = path_to_adamantine_files + adamantine_filename + "_m*.*.pvtu"
             list_of_ensemble_files = glob.glob(filename_pattern)
             # Now extract the bounds of the ensemble IDs
@@ -311,7 +289,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
 
             if (ensemble_id_min != 0):
                 print("Error: unexpected ensemble members, no 0 member")
-                sys.exit()
+                os.exit()
 
             filename_ts_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.pvtu'
 

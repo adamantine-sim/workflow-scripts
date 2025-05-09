@@ -147,8 +147,7 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         if plot_sim_field:
             print("Plotting the simulation result...")
 
-            pyvista.start_xvfb()
-            pl = pyvista.Plotter()
+            pl = pyvista.Plotter(off_screen=True)
 
             # Get the list of time steps and sort them            
             for i in range(0,mpi_domains):
@@ -204,9 +203,8 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         time_expt_field_start = time.perf_counter()
 
         if plot_expt_field:
-            
-            pyvista.start_xvfb()
-            pl = pyvista.Plotter()
+
+            pl = pyvista.Plotter(off_screen=True)
 
             # Get the list of time steps and sort them
 

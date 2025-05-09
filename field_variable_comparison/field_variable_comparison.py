@@ -72,8 +72,7 @@ def pvtu_field_variable_comparison(file1, file2, field_name):
     dataset2 = pyvista.read(full_filename2)
     dataset2.set_active_scalars(field_name)
 
-    pyvista.start_xvfb()
-    pl = pyvista.Plotter()
+    pl = pyvista.Plotter(off_screen=True)
     pl.add_mesh(dataset1, show_edges=True, cmap='plasma')
     #pl.show()
     #pl.save_graphic("field1_out.pdf")

@@ -100,10 +100,13 @@ def objective_17_4_PH(time_series):
     # NOTE: I have a special check in here to ignore cases where the temperature dips down below 5K to deal with artifacts
     # in the data. I'm still not sure why those occur.
 
+    K_to_C = 273.15
+
     T_solidus = 1713.0 # Solidus temperature for 17-4PH
-    T_Ms = 150.0 + 273.15 # Martensite start temperature in K
-    T_ppt = 480.0 + 273.15 # Optimal temperature for precipitation
-    T_band_ppt = 50.0 # Width of the band around T_ppt that "count" for the objective function
+    T_Ms = 150.0 + K_to_C # Martensite start temperature in K
+    T_ppt = 480.0 + K_to_C # Optimal temperature for precipitation
+    T_band_ppt = 50.0 # Width of the band around T_ppt that "count" for the objective function, this is the "diameter" of the band. The band has a hard upper limit at the reaustenization temperature
+    T_A = 550.0 + K_to_C # Re-austenization temperature
 
     per_point_scores = np.zeros(time_series.shape[1])
     
@@ -112,17 +115,19 @@ def objective_17_4_PH(time_series):
         single_point_series = time_series[:,n]
 
         has_melted = False
-        has_cooled_to_Ms = False
+        is_martensite = False
 
         for temperature in single_point_series:
             if temperature >= T_solidus:
                     has_melted = True
                     per_point_scores[n] = 0
-            elif has_melted and (not has_cooled_to_Ms):
+            elif has_melted and (not is_martensite):
                 if temperature > 5.0 and temperature < T_Ms:
-                    has_cooled_to_Ms = True
-            elif has_cooled_to_Ms:
-                if np.abs(temperature-T_ppt) < T_band_ppt/2.0:
+                    is_martensite = True
+            elif is_martensite:
+                if temperature > T_A:
+                    is_martensite = False
+                elif np.abs(temperature-T_ppt) < T_band_ppt/2.0:
                     per_point_scores[n] = per_point_scores[n] + 1
 
     return per_point_scores

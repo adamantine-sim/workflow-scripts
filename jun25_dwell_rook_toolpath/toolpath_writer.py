@@ -3,8 +3,6 @@ import numpy as np
 import re
 import os
 
-from toolpath_utilities.toolpath_utilities import get_time_position_power_inp
-#import toolpath_utilities
 
 def get_time_position_power_inp(file):
     f = open(file, 'r')

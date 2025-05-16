@@ -157,10 +157,15 @@ def strip_duplicate_locations(time_position_power):
 
     return out
 
+def get_chunked_value(vals, location, chunk_locations):
+    val = vals[0]
+    for i in range(0,len(chunk_locations)-1):
+        if location > chunk_locations[i] and location < chunk_locations[i+1]:
+            val = vals[i]
+    return val
 
 
-def main():
-    dwell_0 = 10 # s
+def write_toolpath(dwell_0_chunked = [10]):
     dwell_1 = 10 # s
     reheat_power = 500.0 # W
     scan_path_out = "scan_path.inp"
@@ -174,12 +179,22 @@ def main():
     for file in filenames:
         base_split_layers.append(get_time_position_power_inp(directory_with_as_sliced_layers + '/' + file))
 
+    num_layers = len(base_split_layers)
+
     layer_index = 0
 
     section_start_time = 1e-10
 
+
+    num_dwell_0_chunks = len(dwell_0_chunked)
+    dwell_0_chunk_locations = []
+    for i in range(0, num_dwell_0_chunks-1):
+        dwell_0_chunk_locations.append(round(i/num_layers * num_layers))
+
     new_time_position_power = []
     for layer in base_split_layers:
+        dwell_0 = get_chunked_value(dwell_0_chunked, layer_index, dwell_0_chunk_locations)
+
         # Each layer goes: print, dwell, reheat, dwell
 
         print("LAYER", layer_index)
@@ -221,4 +236,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    write_toolpath()

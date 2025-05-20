@@ -4,7 +4,7 @@ import os
 import glob
 import matplotlib.pyplot as plt
 import sys
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 import argparse
 
 
@@ -53,28 +53,35 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
     # NOTE: About 1 out of every 10 points has one or more spurious drops to zero after being activated. I'm not sure what
     # that is caused by. Maybe this is due to points that lie on the activated/deactivated interface?
 
+    # Would it be faster to sort each time series by location instead of finding these maps every time?
+
     print("Getting the time series...")
 
-    iteration_numbers = get_iteration_count(directory + adamantine_filename)
+    iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))
 
     # Load first dataset (reference mesh)
-    dataset_0 = pyvista.read(f"{directory}{adamantine_filename}.{iteration_numbers[0]}.pvtu")
+    dataset_0 = pyvista.read(f"{directory}/{adamantine_filename}.{iteration_numbers[0]}.pvtu")
     n_points = dataset_0.number_of_points
 
     # Allocate the time series array
     val = np.zeros((len(iteration_numbers), n_points))
 
+    # Preallocate tree query result (optional, for speed)
+    distances = np.empty(n_points)
+    nearest_indices = np.empty(n_points, dtype=int)
+
+
     ref_points = dataset_0.points
 
     for idx, iteration_number in enumerate(iteration_numbers):
-        file_to_plot = f"{directory}{adamantine_filename}.{iteration_number}.pvtu"
+        file_to_plot = f"{directory}/{adamantine_filename}.{iteration_number}.pvtu"
         dataset = pyvista.read(file_to_plot)
 
         # Build KDTree of current timestep points
-        tree = cKDTree(dataset.points)
+        tree = KDTree(dataset.points)
 
         # Match reference points to nearest in current dataset
-        distances, nearest_indices = tree.query(ref_points)
+        distances, nearest_indices = tree.query(ref_points, workers=-1)
 
         if np.sum(distances) > 0.01:
             print(f'WARNING: timestep {iteration_number} has large total match distance: {np.sum(distances):.4f}')
@@ -92,6 +99,63 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
             plt.ylabel("Temperature")
             plt.grid(True)
             plt.show()
+
+    return val
+
+def sort_points_by_xyz(points):
+    # Use structured array to sort lexicographically by x, then y, then z
+    return np.lexsort((points[:, 2], points[:, 1], points[:, 0]))
+
+def get_time_series_sort(directory, adamantine_filename, field_name, line_plots):
+    # NOTE: About 1 out of every 10 points has one or more spurious drops to zero after being activated. I'm not sure what
+    # that is caused by. Maybe this is due to points that lie on the activated/deactivated interface?
+
+    print("Getting the time series...")
+
+    iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))
+
+    # Load reference
+    ref_dataset = pyvista.read(f"{directory}/{adamantine_filename}.{iteration_numbers[0]}.pvtu")
+    ref_points = ref_dataset.points
+    sort_idx = sort_points_by_xyz(ref_points)
+    sorted_ref_points = ref_points[sort_idx]
+    n_points = len(sorted_ref_points)
+
+    # Initialize result
+    val = np.empty((len(iteration_numbers), n_points))
+
+    for idx, iteration_number in enumerate(iteration_numbers):
+        file_path = f"{directory}/{adamantine_filename}.{iteration_number}.pvtu"
+        dataset = pyvista.read(file_path)
+
+        points = dataset.points
+        if points.shape != ref_points.shape:
+            raise ValueError(f"Point count mismatch at timestep {iteration_number}")
+
+        # Sort this timestep's points
+        current_sort_idx = sort_points_by_xyz(points)
+        sorted_points = points[current_sort_idx]
+
+        # Compare sorted points to reference
+        if not np.allclose(sorted_points, sorted_ref_points, atol=1e-10):
+            print(f"WARNING: timestep {iteration_number} point mismatch after sorting!")
+
+        # Reorder data using sort index
+        temperature = dataset.point_data[field_name][current_sort_idx]
+        val[idx] = temperature
+
+    # Optional plotting for to see the single-point temperature history
+    if (line_plots):
+        for i in range(min(5, val.shape[1])):  # plot first 5 points
+            plt.figure()
+            plt.plot(iteration_numbers, val[:, i], 'b.-')
+            plt.title(f"Point {i} Temperature Over Time")
+            plt.xlabel("Iteration")
+            plt.ylabel("Temperature")
+            plt.grid(True)
+            plt.show()
+
+    # TODO: Do I need to try to get these back into the "right" order for plotting?
 
     return val
 
@@ -147,7 +211,8 @@ def plot_score_on_mesh(directory, adamantine_filename, per_point_scores):
 
 
 def analysis(directory, adamantine_filename, field_name, line_plots, volume_plot):
-    time_series = get_time_series(directory, adamantine_filename, field_name, line_plots)
+    #time_series = get_time_series(directory, adamantine_filename, field_name, line_plots)
+    time_series = get_time_series_sort(directory, adamantine_filename, field_name, line_plots)
 
     per_point_scores = objective_17_4_PH(time_series)
 

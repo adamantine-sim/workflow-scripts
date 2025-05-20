@@ -86,8 +86,8 @@ def split_into_layers(time_position_power, epsilon=0.001):
 
 def time_position_power_dwell(start_time, position, duration):
 
-    print("start time", start_time)
-    print("duration", duration)
+    #print("start time", start_time)
+    #print("duration", duration)
     dwell_segment = [(start_time+duration, position, 0.0)]
 
     return dwell_segment
@@ -146,7 +146,7 @@ def flatten_layer_z(layer, reference_index=0):
     return new_layer
 
 def strip_duplicate_locations(time_position_power):
-    print("STRIP")
+    #print("STRIP")
     out = []
     for entry in time_position_power:
         if len(out) > 0:
@@ -197,12 +197,12 @@ def write_toolpath(dwell_0_chunked = [10]):
 
         # Each layer goes: print, dwell, reheat, dwell
 
-        print("LAYER", layer_index)
+        #print("LAYER", layer_index)
 
         flat_layer = flatten_layer_z(layer, 10)
 
         shifted_layer = shift_time(flat_layer, section_start_time)
-        print("shifted layer", shifted_layer)
+        #print("shifted layer", shifted_layer)
         layer_to_add = add_power_off_entry(shifted_layer)
 
         new_time_position_power = new_time_position_power + layer_to_add

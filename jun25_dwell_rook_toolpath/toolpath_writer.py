@@ -157,29 +157,41 @@ def strip_duplicate_locations(time_position_power):
 
     return out
 
-
-
-def main():
-    dwell_0 = 10 # s
-    dwell_1 = 10 # s
-    reheat_power = 500.0 # W
-    scan_path_out = "scan_path.inp"
+def get_toolpath_info(toolpath_path):
+    toolpath_info = {}
+    toolpath_info['dwell_0'] = 10 # s
+    toolpath_info['dwell_1'] = 10 # s
+    toolpath_info['reheat_power'] = 500 # W
+    toolpath_info['scan_path_out'] = "scan_path.inp"
 
     # Load the individually sliced layers without dwells or reheat passes
-    directory_with_as_sliced_layers = "layer_toolpaths_as_sliced"
+   
     filename_pattern = 'layer_(\d+)_scan_path\.txt'
-    filenames = get_sorted_layer_files(directory_with_as_sliced_layers, filename_pattern)
+    filenames = get_sorted_layer_files(toolpath_path, filename_pattern)
 
     base_split_layers = []
     for file in filenames:
-        base_split_layers.append(get_time_position_power_inp(directory_with_as_sliced_layers + '/' + file))
+        base_split_layers.append(get_time_position_power_inp(toolpath_path + '/' + file))
 
+    # Currently we assume that all layers are the same height
+    toolpath_info['layer_height'] = base_split_layers[1][1][2] - base_split_layers[0][1][2]
+
+    toolpath_info['base_split_layers'] = base_split_layers
+
+    toolpath_info['num_layers'] = len(base_split_layers)
+
+    return toolpath_info
+
+def main():
+    toolpath_path = "layer_toolpaths_as_sliced"
+    toolpath_info = get_toolpath_info(toolpath_path)
+    
     layer_index = 0
 
     section_start_time = 1e-10
 
     new_time_position_power = []
-    for layer in base_split_layers:
+    for layer in toolpath_info['base_split_layers']:
         # Each layer goes: print, dwell, reheat, dwell
 
         print("LAYER", layer_index)
@@ -195,20 +207,20 @@ def main():
         dwell_start_time = new_time_position_power[-1][0]
         dwell_position = new_time_position_power[-1][1]
 
-        first_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_0)
+        first_dwell = time_position_power_dwell(dwell_start_time, dwell_position, toolpath_info['dwell_0'])
         new_time_position_power = new_time_position_power + first_dwell
 
         section_start_time = new_time_position_power[-1][0]
 
         reheat_pass = copy.deepcopy(flat_layer)
-        reheat_pass = update_power(reheat_pass, reheat_power)
+        reheat_pass = update_power(reheat_pass, toolpath_info['reheat_power'])
         reheat_pass = shift_time(reheat_pass, section_start_time)
         new_time_position_power = new_time_position_power + reheat_pass
 
         dwell_start_time = new_time_position_power[-1][0]
         dwell_position = new_time_position_power[-1][1]
 
-        second_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_1)
+        second_dwell = time_position_power_dwell(dwell_start_time, dwell_position, toolpath_info['dwell_1'])
         new_time_position_power = new_time_position_power + second_dwell
 
         # Increment for the next layer
@@ -217,7 +229,7 @@ def main():
 
     tpp = strip_duplicate_locations(new_time_position_power)
 
-    write_event_series(tpp, scan_path_out)
+    write_event_series(tpp, toolpath_info['scan_path_out'])
 
 
 if __name__ == "__main__":

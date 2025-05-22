@@ -86,8 +86,8 @@ def split_into_layers(time_position_power, epsilon=0.001):
 
 def time_position_power_dwell(start_time, position, duration):
 
-    print("start time", start_time)
-    print("duration", duration)
+    #print("start time", start_time)
+    #print("duration", duration)
     dwell_segment = [(start_time+duration, position, 0.0)]
 
     return dwell_segment
@@ -146,7 +146,7 @@ def flatten_layer_z(layer, reference_index=0):
     return new_layer
 
 def strip_duplicate_locations(time_position_power):
-    print("STRIP")
+    #print("STRIP")
     out = []
     for entry in time_position_power:
         if len(out) > 0:
@@ -157,13 +157,21 @@ def strip_duplicate_locations(time_position_power):
 
     return out
 
+
+def get_chunked_value(vals, location, chunk_locations):
+    val = vals[0]
+    for i in range(0,len(chunk_locations)-1):
+        if location > chunk_locations[i] and location < chunk_locations[i+1]:
+            val = vals[i]
+    return val
+  
 def get_toolpath_info(toolpath_path):
     toolpath_info = {}
     toolpath_info['dwell_0'] = 10 # s
     toolpath_info['dwell_1'] = 10 # s
     toolpath_info['reheat_power'] = 500 # W
     toolpath_info['scan_path_out'] = "scan_path.inp"
-
+    
     # Load the individually sliced layers without dwells or reheat passes
    
     filename_pattern = 'layer_(\d+)_scan_path\.txt'
@@ -177,12 +185,14 @@ def get_toolpath_info(toolpath_path):
     toolpath_info['layer_height'] = base_split_layers[1][1][2] - base_split_layers[0][1][2]
 
     toolpath_info['base_split_layers'] = base_split_layers
-
+    
     toolpath_info['num_layers'] = len(base_split_layers)
 
     return toolpath_info
 
-def main():
+
+def write_toolpath(dwell_0_chunked = [10]):
+    
     toolpath_path = "layer_toolpaths_as_sliced"
     toolpath_info = get_toolpath_info(toolpath_path)
     
@@ -190,16 +200,25 @@ def main():
 
     section_start_time = 1e-10
 
+
+    num_dwell_0_chunks = len(dwell_0_chunked)
+    dwell_0_chunk_locations = []
+    for i in range(0, num_dwell_0_chunks-1):
+        dwell_0_chunk_locations.append(round(i/num_layers * num_layers))
+
     new_time_position_power = []
+
     for layer in toolpath_info['base_split_layers']:
+        dwell_0 = get_chunked_value(dwell_0_chunked, layer_index, dwell_0_chunk_locations)
+
         # Each layer goes: print, dwell, reheat, dwell
 
-        print("LAYER", layer_index)
+        #print("LAYER", layer_index)
 
         flat_layer = flatten_layer_z(layer, 10)
 
         shifted_layer = shift_time(flat_layer, section_start_time)
-        print("shifted layer", shifted_layer)
+        #print("shifted layer", shifted_layer)
         layer_to_add = add_power_off_entry(shifted_layer)
 
         new_time_position_power = new_time_position_power + layer_to_add
@@ -207,7 +226,7 @@ def main():
         dwell_start_time = new_time_position_power[-1][0]
         dwell_position = new_time_position_power[-1][1]
 
-        first_dwell = time_position_power_dwell(dwell_start_time, dwell_position, toolpath_info['dwell_0'])
+        first_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_0)
         new_time_position_power = new_time_position_power + first_dwell
 
         section_start_time = new_time_position_power[-1][0]
@@ -233,4 +252,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    write_toolpath()

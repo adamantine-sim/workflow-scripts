@@ -171,6 +171,7 @@ def get_toolpath_info(toolpath_path):
     toolpath_info['dwell_1'] = 10 # s
     toolpath_info['reheat_power'] = 500 # W
     toolpath_info['scan_path_out'] = "scan_path.inp"
+    toolpath_info['lump_size'] = 2
     
     # Load the individually sliced layers without dwells or reheat passes
    
@@ -189,6 +190,7 @@ def get_toolpath_info(toolpath_path):
     toolpath_info['num_layers'] = len(base_split_layers)
 
     return toolpath_info
+
 
 
 def write_toolpath(dwell_0_chunked = [10]):

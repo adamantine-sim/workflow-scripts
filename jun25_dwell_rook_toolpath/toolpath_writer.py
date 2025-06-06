@@ -167,9 +167,10 @@ def get_chunked_value(vals, location, chunk_locations):
   
 def get_toolpath_info(toolpath_path):
     toolpath_info = {}
-    toolpath_info['dwell_0'] = 10 # s
-    toolpath_info['dwell_1'] = 10 # s
-    toolpath_info['reheat_power'] = 500 # W
+    toolpath_info['toolpath_path'] = toolpath_path
+    toolpath_info['dwell_0'] = [10] # s
+    toolpath_info['dwell_1'] = [10] # s
+    toolpath_info['reheat_power'] = [500] # W
     toolpath_info['scan_path_out'] = "scan_path.inp"
     toolpath_info['lump_size'] = 2
     
@@ -189,29 +190,50 @@ def get_toolpath_info(toolpath_path):
     
     toolpath_info['num_layers'] = len(base_split_layers)
 
+    # By default, select all layers
+    toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
+
     return toolpath_info
 
 
 
-def write_toolpath(dwell_0_chunked = [10]):
+def write_toolpath(toolpath_info):
     
-    toolpath_path = "layer_toolpaths_as_sliced"
-    toolpath_info = get_toolpath_info(toolpath_path)
+    toolpath_path = toolpath_info['toolpath_path']
+    num_layers = toolpath_info['num_layers']
+    
+    dwell_0 = toolpath_info['dwell_0']
+    dwell_1 = toolpath_info['dwell_1']
+    reheat_power = toolpath_info['reheat_power']
     
     layer_index = 0
 
     section_start_time = 1e-10
 
 
-    num_dwell_0_chunks = len(dwell_0_chunked)
+    num_dwell_0_chunks = len(dwell_0)
     dwell_0_chunk_locations = []
     for i in range(0, num_dwell_0_chunks-1):
         dwell_0_chunk_locations.append(round(i/num_layers * num_layers))
 
+    num_dwell_1_chunks = len(dwell_1)
+    dwell_1_chunk_locations = []
+    for i in range(0, num_dwell_1_chunks-1):
+        dwell_1_chunk_locations.append(round(i/num_layers * num_layers))
+
+    num_reheat_power_chunks = len(reheat_power)
+    reheat_power_chunk_locations = []
+    for i in range(0, num_reheat_power_chunks-1):
+        reheat_power_chunk_locations.append(round(i/num_layers * num_layers))
+
     new_time_position_power = []
 
-    for layer in toolpath_info['base_split_layers']:
-        dwell_0 = get_chunked_value(dwell_0_chunked, layer_index, dwell_0_chunk_locations)
+    for layer_index in range(toolpath_info['selected_layers'][0], toolpath_info['selected_layers'][1]):
+        layer = toolpath_info['base_split_layers'][layer_index]
+
+        dwell_0_this_chunk = get_chunked_value(dwell_0, layer_index, dwell_0_chunk_locations)
+        dwell_1_this_chunk = get_chunked_value(dwell_1, layer_index, dwell_1_chunk_locations)
+        reheat_power_this_chunk = get_chunked_value(reheat_power, layer_index, reheat_power_chunk_locations)
 
         # Each layer goes: print, dwell, reheat, dwell
 
@@ -228,21 +250,22 @@ def write_toolpath(dwell_0_chunked = [10]):
         dwell_start_time = new_time_position_power[-1][0]
         dwell_position = new_time_position_power[-1][1]
 
-        first_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_0)
+        first_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_0_this_chunk)
         new_time_position_power = new_time_position_power + first_dwell
 
         section_start_time = new_time_position_power[-1][0]
 
         reheat_pass = copy.deepcopy(flat_layer)
-        reheat_pass = update_power(reheat_pass, toolpath_info['reheat_power'])
+        reheat_pass = update_power(reheat_pass, reheat_power_this_chunk)
         reheat_pass = shift_time(reheat_pass, section_start_time)
         new_time_position_power = new_time_position_power + reheat_pass
 
         dwell_start_time = new_time_position_power[-1][0]
         dwell_position = new_time_position_power[-1][1]
 
-        second_dwell = time_position_power_dwell(dwell_start_time, dwell_position, toolpath_info['dwell_1'])
+        second_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_1_this_chunk)
         new_time_position_power = new_time_position_power + second_dwell
+        print(second_dwell)
 
         # Increment for the next layer
         section_start_time = new_time_position_power[-1][0]
@@ -254,4 +277,6 @@ def write_toolpath(dwell_0_chunked = [10]):
 
 
 if __name__ == "__main__":
-    write_toolpath()
+    toolpath_path = "layer_toolpaths_as_sliced"
+    toolpath_info = get_toolpath_info(toolpath_path)
+    write_toolpath(toolpath_info)

@@ -173,7 +173,6 @@ def get_toolpath_info(toolpath_path):
     toolpath_info['reheat_power'] = [500] # W
     toolpath_info['scan_path_out'] = "scan_path.inp"
     toolpath_info['lump_size'] = 2
-    
     # Load the individually sliced layers without dwells or reheat passes
    
     filename_pattern = 'layer_(\d+)_scan_path\.txt'
@@ -192,24 +191,47 @@ def get_toolpath_info(toolpath_path):
 
     # By default, select all layers
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
-
     return toolpath_info
 
 
 
 def write_toolpath(toolpath_info):
+    print_path = toolpath_info['print_path']
+    reheat_path = toolpath_info['reheat_path']
     
-    toolpath_path = toolpath_info['toolpath_path']
-    num_layers = toolpath_info['num_layers']
     
     dwell_0 = toolpath_info['dwell_0']
     dwell_1 = toolpath_info['dwell_1']
     reheat_power = toolpath_info['reheat_power']
     
+    # Load the individually sliced layers without dwells or reheat passes
+   
+    filename_pattern = 'layer_(\d+)_scan_path\.txt'
+    filenames_print = get_sorted_layer_files(print_path, filename_pattern)
+    filenames_reheat = get_sorted_layer_files(reheat_path, filename_pattern)
+
+    base_split_layers_print = []
+    for file in filenames_print:
+        base_split_layers_print.append(get_time_position_power_inp(print_path + '/' + file))
+    
+    base_split_layers_reheat = []
+    for file in filenames_reheat:
+        base_split_layers_reheat.append(get_time_position_power_inp(reheat_path + '/' + file))
+    
+    # Currently we assume that all layers are the same height
+    toolpath_info['layer_height'] = base_split_layers_print[1][1][2] - base_split_layers_print[0][1][2]
+
+    toolpath_info['base_split_layers_print'] = base_split_layers_print
+    toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
+    
+    toolpath_info['num_layers'] = len(base_split_layers_print)
+    num_layers = toolpath_info['num_layers']
+    # By default, select all layers ..........What???
+    toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
+    
     layer_index = 0
 
     section_start_time = 1e-10
-
 
     num_dwell_0_chunks = len(dwell_0)
     dwell_0_chunk_locations = []
@@ -229,7 +251,7 @@ def write_toolpath(toolpath_info):
     new_time_position_power = []
 
     for layer_index in range(toolpath_info['selected_layers'][0], toolpath_info['selected_layers'][1]):
-        layer = toolpath_info['base_split_layers'][layer_index]
+        layer = toolpath_info['base_split_layers_print'][layer_index]
 
         dwell_0_this_chunk = get_chunked_value(dwell_0, layer_index, dwell_0_chunk_locations)
         dwell_1_this_chunk = get_chunked_value(dwell_1, layer_index, dwell_1_chunk_locations)
@@ -254,18 +276,20 @@ def write_toolpath(toolpath_info):
         new_time_position_power = new_time_position_power + first_dwell
 
         section_start_time = new_time_position_power[-1][0]
+        
+        # Replacing this with timings from real print in reheat layers
+        #reheat_pass = copy.deepcopy(flat_layer)
+        if layer_index < num_layers - 1:
+            reheat_pass = toolpath_info['base_split_layers_reheat'][layer_index]
+            reheat_pass = update_power(reheat_pass, reheat_power_this_chunk)
+            reheat_pass = shift_time(reheat_pass, section_start_time)
+            new_time_position_power = new_time_position_power + reheat_pass
 
-        reheat_pass = copy.deepcopy(flat_layer)
-        reheat_pass = update_power(reheat_pass, reheat_power_this_chunk)
-        reheat_pass = shift_time(reheat_pass, section_start_time)
-        new_time_position_power = new_time_position_power + reheat_pass
+            dwell_start_time = new_time_position_power[-1][0]
+            dwell_position = new_time_position_power[-1][1]
 
-        dwell_start_time = new_time_position_power[-1][0]
-        dwell_position = new_time_position_power[-1][1]
-
-        second_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_1_this_chunk)
-        new_time_position_power = new_time_position_power + second_dwell
-        print(second_dwell)
+            second_dwell = time_position_power_dwell(dwell_start_time, dwell_position, dwell_1_this_chunk)
+            new_time_position_power = new_time_position_power + second_dwell
 
         # Increment for the next layer
         section_start_time = new_time_position_power[-1][0]
@@ -278,5 +302,7 @@ def write_toolpath(toolpath_info):
 
 if __name__ == "__main__":
     toolpath_path = "layer_toolpaths_as_sliced"
+    #toolpath_path = "print_layers"
+    #reheat_path = "reheat_layers"
     toolpath_info = get_toolpath_info(toolpath_path)
     write_toolpath(toolpath_info)

@@ -12,7 +12,7 @@ def get_time_position_power_inp(file):
     time_position_power = []
 
     for line in lines:
-        if line is not '\n':
+        if line != '\n':
             split_line = line.split(',')
             time = float(split_line[0])
             x = float(split_line[1])
@@ -168,18 +168,36 @@ def get_chunked_value(vals, location, chunk_locations):
             val = vals[i]
     return val
   
-def get_toolpath_info(print_path, reheat_path):
+def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
     toolpath_info = {}
     toolpath_info['print_path'] = print_path
     toolpath_info['reheat_path'] = reheat_path
-    toolpath_info['dwell_0'] = [10] # s
-    toolpath_info['dwell_1'] = [10] # s
-    toolpath_info['reheat_power'] = [500] # W
+    toolpath_info['dwell_0'] = dwell_0 # s
+    toolpath_info['dwell_1'] = dwell_1 # s
+    toolpath_info['reheat_power'] = reheat_power # W
     toolpath_info['scan_path_out'] = "scan_path.inp"
     toolpath_info['lump_size'] = 2
     toolpath_info['includes_end_message'] = True
+
+    filename_pattern = 'layer_(\d+)_scan_path\.txt'
+    filenames_print = get_sorted_layer_files(print_path, filename_pattern)
+    filenames_reheat = get_sorted_layer_files(reheat_path, filename_pattern)
+
+    base_split_layers_print = []
+    for file in filenames_print:
+        base_split_layers_print.append(get_time_position_power_inp(print_path + '/' + file))
     
-    toolpath_info['num_layers'] = len(base_split_layers)
+    base_split_layers_reheat = []
+    for file in filenames_reheat:
+        base_split_layers_reheat.append(get_time_position_power_inp(reheat_path + '/' + file))
+
+    # Currently we assume that all layers are the same height
+    toolpath_info['layer_height'] = base_split_layers_print[1][1][2] - base_split_layers_print[0][1][2]
+
+    toolpath_info['base_split_layers_print'] = base_split_layers_print
+    toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
+    
+    toolpath_info['num_layers'] = len(base_split_layers_print)
 
     # By default, select all layers
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
@@ -288,7 +306,7 @@ def write_toolpath(toolpath_info):
     # 7) Clean up and write out
     
     tpp_clean = strip_duplicate_locations(new_tpp)
-    write_event_series(tpp_clean, toolpath_info['scan_path_out'])
+    write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 
 if __name__ == "__main__":
     """

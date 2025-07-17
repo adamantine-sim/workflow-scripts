@@ -12,13 +12,14 @@ def get_time_position_power_inp(file):
     time_position_power = []
 
     for line in lines:
-        split_line = line.split(',')
-        time = float(split_line[0])
-        x = float(split_line[1])
-        y = float(split_line[2])
-        z = float(split_line[3])
-        power = float(split_line[4])
-        time_position_power.append((time, (x,y,z), power))
+        if line != '\n':
+            split_line = line.split(',')
+            time = float(split_line[0])
+            x = float(split_line[1])
+            y = float(split_line[2])
+            z = float(split_line[3])
+            power = float(split_line[4])
+            time_position_power.append((time, (x,y,z), power))
 
     return time_position_power
 
@@ -47,7 +48,7 @@ def extract_single_layer(time_position_power, target_layer):
 
     return extracted_layer
 
-def write_event_series(time_position_power, filename):
+def write_event_series(time_position_power, filename, include_end_message):
     scan_path_string = ""
     for entry in time_position_power:
         time = entry[0]
@@ -60,7 +61,10 @@ def write_event_series(time_position_power, filename):
 
         scan_path_string = scan_path_string + line_string
 
-    scan_path_string = scan_path_string + "SCAN_PATH_END"
+    if include_end_message:
+        scan_path_string = scan_path_string + "SCAN_PATH_END"
+    else:
+        scan_path_string = scan_path_string + "\n"
     
     f = open(filename, 'w')
     f.write(scan_path_string)
@@ -164,29 +168,36 @@ def get_chunked_value(vals, location, chunk_locations):
             val = vals[i]
     return val
   
-def get_toolpath_info(toolpath_path):
+def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
     toolpath_info = {}
-    toolpath_info['toolpath_path'] = toolpath_path
-    toolpath_info['dwell_0'] = [10] # s
-    toolpath_info['dwell_1'] = [10] # s
-    toolpath_info['reheat_power'] = [500] # W
+    toolpath_info['print_path'] = print_path
+    toolpath_info['reheat_path'] = reheat_path
+    toolpath_info['dwell_0'] = dwell_0 # s
+    toolpath_info['dwell_1'] = dwell_1 # s
+    toolpath_info['reheat_power'] = reheat_power # W
     toolpath_info['scan_path_out'] = "scan_path.inp"
     toolpath_info['lump_size'] = 2
-    # Load the individually sliced layers without dwells or reheat passes
-   
-    filename_pattern = 'layer_(\d+)_scan_path\.txt'
-    filenames = get_sorted_layer_files(toolpath_path, filename_pattern)
+    toolpath_info['includes_end_message'] = True
 
-    base_split_layers = []
-    for file in filenames:
-        base_split_layers.append(get_time_position_power_inp(toolpath_path + '/' + file))
+    filename_pattern = 'layer_(\d+)_scan_path\.txt'
+    filenames_print = get_sorted_layer_files(print_path, filename_pattern)
+    filenames_reheat = get_sorted_layer_files(reheat_path, filename_pattern)
+
+    base_split_layers_print = []
+    for file in filenames_print:
+        base_split_layers_print.append(get_time_position_power_inp(print_path + '/' + file))
+    
+    base_split_layers_reheat = []
+    for file in filenames_reheat:
+        base_split_layers_reheat.append(get_time_position_power_inp(reheat_path + '/' + file))
 
     # Currently we assume that all layers are the same height
-    toolpath_info['layer_height'] = base_split_layers[1][1][2] - base_split_layers[0][1][2]
+    toolpath_info['layer_height'] = base_split_layers_print[1][1][2] - base_split_layers_print[0][1][2]
 
-    toolpath_info['base_split_layers'] = base_split_layers
+    toolpath_info['base_split_layers_print'] = base_split_layers_print
+    toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
     
-    toolpath_info['num_layers'] = len(base_split_layers)
+    toolpath_info['num_layers'] = len(base_split_layers_print)
 
     # By default, select all layers
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
@@ -295,7 +306,7 @@ def write_toolpath(toolpath_info):
     # 7) Clean up and write out
     
     tpp_clean = strip_duplicate_locations(new_tpp)
-    write_event_series(tpp_clean, toolpath_info['scan_path_out'])
+    write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 
 if __name__ == "__main__":
     """

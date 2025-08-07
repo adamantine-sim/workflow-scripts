@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import re
 import os
+import json
 from typing import List, Tuple
 
 def get_time_position_power_inp(file):
@@ -167,6 +168,12 @@ def get_chunked_value(vals, location, chunk_locations):
         if location > chunk_locations[i] and location < chunk_locations[i+1]:
             val = vals[i]
     return val
+
+def pick_chunk(values: List[float], layer_idx: int, num_layers: int) -> float:
+    n_chunks = len(values)
+    width = num_layers / n_chunks
+    cidx = min(int(layer_idx // width), n_chunks - 1)
+    return values[cidx]
   
 def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
     toolpath_info = {}
@@ -192,7 +199,7 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
         base_split_layers_reheat.append(get_time_position_power_inp(reheat_path + '/' + file))
 
     # Currently we assume that all layers are the same height
-    toolpath_info['layer_height'] = base_split_layers_print[1][1][2] - base_split_layers_print[0][1][2]
+    toolpath_info['layer_height'] = (base_split_layers_print[toolpath_info['lump_size']][1][1][2] - base_split_layers_print[0][1][1][2])/toolpath_info['lump_size']
 
     toolpath_info['base_split_layers_print'] = base_split_layers_print
     toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
@@ -203,15 +210,36 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
     return toolpath_info
 
+def generate_print_plan_file(toolpath_info, plan_filename):
+    dwell_0       = toolpath_info['dwell_0']
+    reheat_power  = toolpath_info['reheat_power']
+    dwell_1       = toolpath_info['dwell_1']
+    num_layers = toolpath_info['num_layers']
+
+    data = []
+    for layer_idx in range(num_layers):
+        d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
+        rp = pick_chunk(reheat_power, layer_idx, num_layers)
+        d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
+
+        entry = {
+            "layer": layer_idx,
+            "power": rp,
+            "dwell_0": d0,
+            "dwell_1": d1
+        }
+        data.append(entry)
+
+    with open(plan_filename, "w") as f:
+        json.dump(data, f, indent=2)
 
 
-def write_toolpath(toolpath_info):
+def create_toolpath(toolpath_info):
     """
     Builds a new scan_path.inp by:
       - loading each peeled layer from print_layers/ and reheat_layers/
       - inserting dwell_0, reheat_power, dwell_1 in equal-width chunks
       - shifting times accordingly
-      - writing out the final event series
     """
     # 1) Unpack inputs
     print_path    = toolpath_info['print_path']
@@ -219,6 +247,9 @@ def write_toolpath(toolpath_info):
     dwell_0       = toolpath_info['dwell_0']
     reheat_power  = toolpath_info['reheat_power']
     dwell_1       = toolpath_info['dwell_1']
+    num_layers = toolpath_info['num_layers']
+    base_split_layers_print = toolpath_info['base_split_layers_print']
+    base_split_layers_reheat = toolpath_info['base_split_layers_reheat']
 
     # 2) Discover peeled layer files
     filename_pattern = r'layer_(\d+)_scan_path\.txt'
@@ -238,45 +269,16 @@ def write_toolpath(toolpath_info):
         key=lambda fn: int(re.match(r'layer_(\d+)_scan_path\.txt', fn).group(1))
     )
     
-    # 3) Load the time/position/power for each peeled layer
-    base_split_layers_print = [
-        get_time_position_power_inp(os.path.join(print_path, fn))
-        for fn in filenames_print
-    ]
-    
-    base_split_layers_reheat = [
-        get_time_position_power_inp(os.path.join(reheat_path, fn))
-        for fn in filenames_reheat
-    ]
-   
-    # 4) Record metadata
-    num_layers = len(base_split_layers_print)
-    toolpath_info['num_layers'] = num_layers
-    toolpath_info['selected_layers'] = (0, num_layers)
-    # layer height (assumes uniform layering)
-    h0 = base_split_layers_print[0][1][2]
-    h1 = base_split_layers_print[1][1][2]
-    toolpath_info['layer_height'] = h1 - h0
-    toolpath_info['base_split_layers_print'] = base_split_layers_print
-    toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
-
-    # 5) Helper: pick the correct chunk value for a given layer
-    def pick_chunk(values: List[float], layer_idx: int) -> float:
-        n_chunks = len(values)
-        width = num_layers / n_chunks
-        cidx = min(int(layer_idx // width), n_chunks - 1)
-        return values[cidx]
-
-    # 6) Build the new time–position–power series
+    # 3) Build the new time–position–power series
     new_tpp = []
     section_start_time = 1e-10
-    for layer_idx in range(num_layers):
-        # 6a) Pick parameters for this layer
-        d0 = pick_chunk(dwell_0,      layer_idx)
-        rp = pick_chunk(reheat_power, layer_idx)
-        d1 = pick_chunk(dwell_1,      layer_idx)
+    for layer_idx in range(*toolpath_info['selected_layers']):
+        # 3a) Pick parameters for this layer
+        d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
+        rp = pick_chunk(reheat_power, layer_idx, num_layers)
+        d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
 
-        # 6b) Print slice
+        # 3b) Print slice
         layer = base_split_layers_print[layer_idx]
         shifted = shift_time(layer, section_start_time)
         # start-of-slice power toggle
@@ -288,11 +290,11 @@ def write_toolpath(toolpath_info):
         new_tpp += slice_entries
         section_start_time = new_tpp[-1][0] + d0
         
-        # 6c) Skip dwell/reheat after the final printed layer NOTE: NO DATA, CHANGE EXP & REMOVE
-        if layer_idx == num_layers - 1:
+        # 3c) Skip dwell/reheat after the final printed layer NOTE: NO DATA, CHANGE EXP & REMOVE
+        if layer_idx == toolpath_info['selected_layers'][1] - 1:
             continue
 
-        # 6d) First dwell + Reheat pass + second dwell (skip after last layer)
+        # 3d) First dwell + Reheat pass + second dwell (skip after last layer)
         reheat = base_split_layers_reheat[layer_idx]
         reheat = update_power(reheat, rp)
         reheat = shift_time(reheat, section_start_time)
@@ -303,9 +305,15 @@ def write_toolpath(toolpath_info):
         pos  = new_tpp[-1][1]
         new_tpp += time_position_power_dwell(t_d1, pos, d1)
         section_start_time = new_tpp[-1][0]
-    # 7) Clean up and write out
-    
+    # 4) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)
+
+    return tpp_clean
+
+def write_toolpath(toolpath_info):
+    
+    tpp_clean = create_toolpath(toolpath_info)
+
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 
 if __name__ == "__main__":

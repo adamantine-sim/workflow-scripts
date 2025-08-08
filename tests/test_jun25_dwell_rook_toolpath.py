@@ -6,6 +6,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from jun25_dwell_rook_toolpath.toolpath_writer import get_toolpath_info
 from jun25_dwell_rook_toolpath.toolpath_writer import write_toolpath
+from jun25_dwell_rook_toolpath.toolpath_writer import generate_print_plan_file
+
 
 def write_full_toolpath():
     print("Test: Full toolpath")
@@ -58,12 +60,34 @@ def write_two_layer_toolpath():
 
     return passed
 
+def write_print_plan():
+
+    toolpath_info = {
+        'dwell_0'       : [20, 30, 40, 50],
+        'reheat_power'  : [360, 450, 600, 800],
+        'dwell_1'       : [30],
+        "num_layers"    : 85
+    }
+
+    generate_print_plan_file(toolpath_info, "test_plan.json")
+
+    passed = True
+
+    if passed:
+        print("Test passed!")
+    else:
+        print("Test failed!")
+
+    return passed
+
 def main():
     print("Testing jun25_dwell_rook_toolpath...")
 
     write_full_toolpath()
 
     write_two_layer_toolpath()
+
+    write_print_plan()
     
 
 

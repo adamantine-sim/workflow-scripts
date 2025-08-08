@@ -28,6 +28,7 @@ def simulate_rayfile(vtk_file, ray_filename, field_name, camera_location, num_ra
             indices.append(i)
 
     # Randomly draw from the list
+    num_rays = min(len(indices), num_rays)
     sampled_indices = random.sample(indices, num_rays)
 
     rays = []

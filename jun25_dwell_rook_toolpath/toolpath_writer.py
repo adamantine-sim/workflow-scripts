@@ -51,6 +51,7 @@ def extract_single_layer(time_position_power, target_layer):
 
 def write_event_series(time_position_power, filename, include_end_message):
     scan_path_string = ""
+    
     for entry in time_position_power:
         time = entry[0]
         if time > 1e-4:
@@ -175,7 +176,7 @@ def pick_chunk(values: List[float], layer_idx: int, num_layers: int) -> float:
     cidx = min(int(layer_idx // width), n_chunks - 1)
     return values[cidx]
   
-def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
+def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, layer_end_time_discretization=None):
     toolpath_info = {}
     toolpath_info['print_path'] = print_path
     toolpath_info['reheat_path'] = reheat_path
@@ -185,6 +186,9 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
     toolpath_info['scan_path_out'] = "scan_path.inp"
     toolpath_info['lump_size'] = 2
     toolpath_info['includes_end_message'] = True
+    toolpath_info['layer_end_time_discretization'] = layer_end_time_discretization
+
+    toolpath_info['admissible_controls'] = ('reheat_power, dwell_0', 'dwell_1')
 
     filename_pattern = 'layer_(\d+)_scan_path\.txt'
     filenames_print = get_sorted_layer_files(print_path, filename_pattern)
@@ -272,6 +276,7 @@ def create_toolpath(toolpath_info):
     # 3) Build the new time–position–power series
     new_tpp = []
     section_start_time = 1e-10
+    layer_end_times = []
     for layer_idx in range(*toolpath_info['selected_layers']):
         # 3a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
@@ -305,14 +310,28 @@ def create_toolpath(toolpath_info):
         pos  = new_tpp[-1][1]
         new_tpp += time_position_power_dwell(t_d1, pos, d1)
         section_start_time = new_tpp[-1][0]
+
+        # 3e) Add an additional dwell at the end of the layer to hit the discretized layer time
+        layer_end_time = new_tpp[-1][0]
+        if (toolpath_info['layer_end_time_discretization'] is not None):
+            remainder = layer_end_time % toolpath_info['layer_end_time_discretization']
+
+            additional_dwell_to_add = toolpath_info['layer_end_time_discretization'] - remainder
+
+            new_tpp += time_position_power_dwell(t_d1, pos, additional_dwell_to_add)
+            section_start_time = new_tpp[-1][0]
+            layer_end_time = new_tpp[-1][0]
+
+        layer_end_times.append(layer_end_time)
+
     # 4) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)
 
-    return tpp_clean
+    return tpp_clean, layer_end_times
 
 def write_toolpath(toolpath_info):
     
-    tpp_clean = create_toolpath(toolpath_info)
+    tpp_clean, layer_end_times = create_toolpath(toolpath_info)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 

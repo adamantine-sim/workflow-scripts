@@ -3,6 +3,7 @@ import numpy as np
 import re
 import os
 import json
+import random
 from typing import List, Tuple
 
 def get_time_position_power_inp(file):
@@ -334,6 +335,71 @@ def write_toolpath(toolpath_info):
     tpp_clean, layer_end_times = create_toolpath(toolpath_info)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
+
+
+def generate_control_options(layer_time_discretization, num_forward_sims, sampling_strategy, toolpath_info):
+    
+    def get_uniform_random_discrete_value(bounds, discrete_step):
+        x = random.uniform(bounds[0], bounds[1])
+        out = round(x / discrete_step) * discrete_step
+        return out
+
+
+    dwell_0_bounds = (layer_time_discretization, 10*layer_time_discretization)
+    dwell_1_bounds = (layer_time_discretization, 10*layer_time_discretization)
+    reheat_power_bounds = (0.0, 500.0)
+
+    modified_toolpath_info_list = []
+
+    num_variables = 3
+    num_adjacent_options = 2 * num_variables + 1
+
+
+    match sampling_strategy:
+        case 'uniform_random':
+            for i in range(num_forward_sims):   
+                
+                unique_parameter_set_found = False
+                counter = 0
+
+                while not unique_parameter_set_found:
+                    # Draw new values
+                    dwell_0_val = get_uniform_random_discrete_value(dwell_0_bounds, layer_time_discretization)
+                    dwell_1_val = get_uniform_random_discrete_value(dwell_1_bounds, layer_time_discretization)
+                    reheat_val = get_uniform_random_discrete_value(reheat_power_bounds, 1.0)
+
+                    # Compare to existing values
+                    for entry in modified_toolpath_info_list:
+                        if np.isclose(dwell_0_val, entry['dwell_0']) and np.isclose(dwell_1_val, entry['dwell_1']) and np.isclose(reheat_val, entry['reheat_power']):
+                            counter = counter + 1
+                            if counter > 1000:
+                                print('Error: Unable to find enough unique random samples for the control simulations')
+                                sys.exit()
+                            continue
+                        
+                    modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
+                    modified_toolpath_info_list[-1]['dwell_0'] = dwell_0_val
+                    modified_toolpath_info_list[-1]['dwell_1'] = dwell_1_val
+                    modified_toolpath_info_list[-1]['reheat_power'] = reheat_val
+                    unique_parameter_set_found = True
+
+            return modified_toolpath_info_list
+        
+        case 'normal_random':
+            # TODO
+            return modified_toolpath_info_list
+
+        case 'individual_perturbations':
+            neighbors_to_sample_from = np.ceil(num_forward_sims/num_adjacent_options)
+            # TODO
+            return modified_toolpath_info_list
+        
+        case _:
+            print('Error: Invalid sampling strategy chosen:', sampling_strategy)
+            sys.exit()
+    
+    return modified_toolpath_info_list
+
 
 if __name__ == "__main__":
     """

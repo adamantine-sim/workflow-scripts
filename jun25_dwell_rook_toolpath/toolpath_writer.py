@@ -326,8 +326,8 @@ def create_toolpath(toolpath_info):
         section_start_time = new_tpp[-1][0] + d0
         
         # 5c) Skip dwell/reheat after the final printed layer NOTE: NO DATA, CHANGE EXP & REMOVE
-        if layer_idx == toolpath_info['selected_layers'][1] - 1:
-            continue
+        #if layer_idx == toolpath_info['selected_layers'][1] - 1:
+        #    continue
 
         # 5d) First dwell + Reheat pass + second dwell (skip after last layer)
         reheat = base_split_layers_reheat[layer_idx]

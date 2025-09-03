@@ -255,6 +255,7 @@ def create_toolpath(toolpath_info):
     num_layers                    = toolpath_info['num_layers']
     includes_end_message          = toolpath_info.get('includes_end_message', True)
     layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', 5.0)
+    set_dwell_every_n_layers      = toolpath_info.get('set_dwell_every_n_layers')
     base_split_layers_print       = toolpath_info.get('base_split_layers_print')
     base_split_layers_reheat      = toolpath_info.get('base_split_layers_reheat')
     num_layers                    = toolpath_info.get('num_layers')

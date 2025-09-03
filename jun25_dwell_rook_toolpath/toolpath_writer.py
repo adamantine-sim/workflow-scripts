@@ -3,6 +3,7 @@ import numpy as np
 import re
 import os
 import json
+import random
 from typing import List, Tuple
 
 def get_time_position_power_inp(file):
@@ -51,6 +52,7 @@ def extract_single_layer(time_position_power, target_layer):
 
 def write_event_series(time_position_power, filename, include_end_message):
     scan_path_string = ""
+    
     for entry in time_position_power:
         time = entry[0]
         if time > 1e-4:
@@ -175,7 +177,7 @@ def pick_chunk(values: List[float], layer_idx: int, num_layers: int) -> float:
     cidx = min(int(layer_idx // width), n_chunks - 1)
     return values[cidx]
   
-def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
+def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, layer_end_time_discretization=None):
     toolpath_info = {}
     toolpath_info['print_path'] = print_path
     toolpath_info['reheat_path'] = reheat_path
@@ -185,6 +187,9 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power):
     toolpath_info['scan_path_out'] = "scan_path.inp"
     toolpath_info['lump_size'] = 2
     toolpath_info['includes_end_message'] = True
+    toolpath_info['layer_end_time_discretization'] = layer_end_time_discretization
+
+    toolpath_info['admissible_controls'] = ('reheat_power, dwell_0', 'dwell_1')
 
     filename_pattern = 'layer_(\d+)_scan_path\.txt'
     filenames_print = get_sorted_layer_files(print_path, filename_pattern)
@@ -242,22 +247,23 @@ def create_toolpath(toolpath_info):
       - shifting times accordingly
     """
     # 1) Unpack inputs
-    print_path    = toolpath_info['print_path']
-    reheat_path   = toolpath_info['reheat_path']
-    dwell_0       = toolpath_info['dwell_0']
-    reheat_power  = toolpath_info['reheat_power']
-    dwell_1       = toolpath_info['dwell_1']
-    num_layers = toolpath_info['num_layers']
-    base_split_layers_print = toolpath_info['base_split_layers_print']
-    base_split_layers_reheat = toolpath_info['base_split_layers_reheat']
+    print_path                    = toolpath_info['print_path']
+    reheat_path                   = toolpath_info['reheat_path']
+    dwell_0                       = toolpath_info['dwell_0']
+    reheat_power                  = toolpath_info['reheat_power']
+    dwell_1                       = toolpath_info['dwell_1']
+    num_layers                    = toolpath_info['num_layers']
+    includes_end_message          = toolpath_info.get('includes_end_message', True)
+    layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', 5.0)
+    base_split_layers_print       = toolpath_info.get('base_split_layers_print')
+    base_split_layers_reheat      = toolpath_info.get('base_split_layers_reheat')
+    num_layers                    = toolpath_info.get('num_layers')
+    selected_layers               = toolpath_info.get('selected_layers')  # tuple (start, end)
 
     # 2) Discover peeled layer files
     filename_pattern = r'layer_(\d+)_scan_path\.txt'
-    #filenames_print  = get_sorted_layer_files(print_path, filename_pattern)
-    #filenames_reheat = get_sorted_layer_files(reheat_path, filename_pattern)
-    
     # grab the raw filenames
-    raw_print_files = get_sorted_layer_files(print_path, filename_pattern)
+    raw_print_files  = get_sorted_layer_files(print_path, filename_pattern)
     raw_reheat_files = get_sorted_layer_files(reheat_path, filename_pattern)
     # then sort them by the integer captured in the filename
     filenames_print = sorted(
@@ -269,11 +275,37 @@ def create_toolpath(toolpath_info):
         key=lambda fn: int(re.match(r'layer_(\d+)_scan_path\.txt', fn).group(1))
     )
     
-    # 3) Build the new time–position–power series
+    # 3) load the base_split_layers_* if not defined in parameters
+    if base_split_layers_print is None:
+        base_split_layers_print = [
+            get_time_position_power_inp(os.path.join(print_path, fn))
+            for fn in filenames_print
+        ]
+        toolpath_info['base_split_layers_print'] = base_split_layers_print 
+
+    if base_split_layers_reheat is None:
+        base_split_layers_reheat = [
+            get_time_position_power_inp(os.path.join(reheat_path, fn))
+            for fn in filenames_reheat
+        ]
+        toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
+    
+    # 4) Infer the number of layers and selected layers if not set in parameters
+    if num_layers is None:
+        num_layers = len(base_split_layers_print)
+        toolpath_info['num_layers'] = num_layers
+
+    if selected_layers is None:
+        selected_layers = (0, num_layers)
+        toolpath_info['selected_layers'] = selected_layers
+   
+    
+    # 5) Build the new time–position–power series
     new_tpp = []
     section_start_time = 1e-10
+    layer_end_times = []
     for layer_idx in range(*toolpath_info['selected_layers']):
-        # 3a) Pick parameters for this layer
+        # 5a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
         d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
@@ -281,8 +313,10 @@ def create_toolpath(toolpath_info):
         # 3b) Print slice
         layer = base_split_layers_print[layer_idx]
         shifted = shift_time(layer, section_start_time)
+        
         # start-of-slice power toggle
         slice_entries = add_power_off_entry(shifted)
+        
         # ensure the very last print-point has power=0.0
         if slice_entries:
             t_last, pos_last, _ = slice_entries[-1]
@@ -290,11 +324,11 @@ def create_toolpath(toolpath_info):
         new_tpp += slice_entries
         section_start_time = new_tpp[-1][0] + d0
         
-        # 3c) Skip dwell/reheat after the final printed layer NOTE: NO DATA, CHANGE EXP & REMOVE
+        # 5c) Skip dwell/reheat after the final printed layer NOTE: NO DATA, CHANGE EXP & REMOVE
         if layer_idx == toolpath_info['selected_layers'][1] - 1:
             continue
 
-        # 3d) First dwell + Reheat pass + second dwell (skip after last layer)
+        # 5d) First dwell + Reheat pass + second dwell (skip after last layer)
         reheat = base_split_layers_reheat[layer_idx]
         reheat = update_power(reheat, rp)
         reheat = shift_time(reheat, section_start_time)
@@ -305,16 +339,95 @@ def create_toolpath(toolpath_info):
         pos  = new_tpp[-1][1]
         new_tpp += time_position_power_dwell(t_d1, pos, d1)
         section_start_time = new_tpp[-1][0]
-    # 4) Clean up and return
+
+        # 5e) Add an additional dwell at the end of the layer to hit the discretized layer time
+        layer_end_time = new_tpp[-1][0]
+        if (toolpath_info['layer_end_time_discretization'] is not None):
+            remainder = layer_end_time % toolpath_info['layer_end_time_discretization']
+
+            additional_dwell_to_add = toolpath_info['layer_end_time_discretization'] - remainder
+
+            new_tpp += time_position_power_dwell(t_d1, pos, additional_dwell_to_add)
+            section_start_time = new_tpp[-1][0]
+            layer_end_time = new_tpp[-1][0]
+
+        layer_end_times.append(layer_end_time)
+
+    # 6) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)
 
-    return tpp_clean
+    return tpp_clean, layer_end_times
 
 def write_toolpath(toolpath_info):
     
-    tpp_clean = create_toolpath(toolpath_info)
+    tpp_clean, layer_end_times = create_toolpath(toolpath_info)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
+
+
+def generate_control_options(layer_time_discretization, num_forward_sims, sampling_strategy, toolpath_info):
+    
+    def get_uniform_random_discrete_value(bounds, discrete_step):
+        x = random.uniform(bounds[0], bounds[1])
+        out = round(x / discrete_step) * discrete_step
+        return out
+
+
+    dwell_0_bounds = (layer_time_discretization, 10*layer_time_discretization)
+    dwell_1_bounds = (layer_time_discretization, 10*layer_time_discretization)
+    reheat_power_bounds = (0.0, 500.0)
+
+    modified_toolpath_info_list = []
+
+    num_variables = 3
+    num_adjacent_options = 2 * num_variables + 1
+
+
+    match sampling_strategy:
+        case 'uniform_random':
+            for i in range(num_forward_sims):   
+                
+                unique_parameter_set_found = False
+                counter = 0
+
+                while not unique_parameter_set_found:
+                    # Draw new values
+                    dwell_0_val = get_uniform_random_discrete_value(dwell_0_bounds, layer_time_discretization)
+                    dwell_1_val = get_uniform_random_discrete_value(dwell_1_bounds, layer_time_discretization)
+                    reheat_val = get_uniform_random_discrete_value(reheat_power_bounds, 1.0)
+
+                    # Compare to existing values
+                    for entry in modified_toolpath_info_list:
+                        if np.isclose(dwell_0_val, entry['dwell_0']) and np.isclose(dwell_1_val, entry['dwell_1']) and np.isclose(reheat_val, entry['reheat_power']):
+                            counter = counter + 1
+                            if counter > 1000:
+                                print('Error: Unable to find enough unique random samples for the control simulations')
+                                sys.exit()
+                            continue
+                        
+                    modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
+                    modified_toolpath_info_list[-1]['dwell_0'] = dwell_0_val
+                    modified_toolpath_info_list[-1]['dwell_1'] = dwell_1_val
+                    modified_toolpath_info_list[-1]['reheat_power'] = reheat_val
+                    unique_parameter_set_found = True
+
+            return modified_toolpath_info_list
+        
+        case 'normal_random':
+            # TODO
+            return modified_toolpath_info_list
+
+        case 'individual_perturbations':
+            neighbors_to_sample_from = np.ceil(num_forward_sims/num_adjacent_options)
+            # TODO
+            return modified_toolpath_info_list
+        
+        case _:
+            print('Error: Invalid sampling strategy chosen:', sampling_strategy)
+            sys.exit()
+    
+    return modified_toolpath_info_list
+
 
 if __name__ == "__main__":
     """

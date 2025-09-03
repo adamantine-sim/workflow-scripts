@@ -167,7 +167,7 @@ def objective_17_4_PH(time_series):
     K_to_C = 273.15
 
     T_solidus = 1713.0 # Solidus temperature for 17-4PH
-    T_Ms = 150.0 + K_to_C # Martensite start temperature in K
+    T_Ms = 105.0 + K_to_C # Martensite start temperature in K
     T_ppt = 480.0 + K_to_C # Optimal temperature for precipitation
     T_band_ppt = 50.0 # Width of the band around T_ppt that "count" for the objective function, this is the "diameter" of the band. The band has a hard upper limit at the reaustenization temperature
     T_A = 550.0 + K_to_C # Re-austenization temperature

@@ -172,6 +172,8 @@ def get_chunked_value(vals, location, chunk_locations):
     return val
 
 def pick_chunk(values: List[float], layer_idx: int, num_layers: int) -> float:
+    if isinstance(values, (int, float)):
+        return float(values)  # single value for all layers
     n_chunks = len(values)
     width = num_layers / n_chunks
     cidx = min(int(layer_idx // width), n_chunks - 1)
@@ -252,7 +254,6 @@ def create_toolpath(toolpath_info):
     dwell_0                       = toolpath_info['dwell_0']
     reheat_power                  = toolpath_info['reheat_power']
     dwell_1                       = toolpath_info['dwell_1']
-    num_layers                    = toolpath_info['num_layers']
     includes_end_message          = toolpath_info.get('includes_end_message', True)
     layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', 5.0)
     set_dwell_every_n_layers      = toolpath_info.get('set_dwell_every_n_layers')
@@ -343,10 +344,10 @@ def create_toolpath(toolpath_info):
 
         # 5e) Add an additional dwell at the end of the layer to hit the discretized layer time
         layer_end_time = new_tpp[-1][0]
-        if (toolpath_info['layer_end_time_discretization'] is not None):
-            remainder = layer_end_time % toolpath_info['layer_end_time_discretization']
+        if (layer_end_time_discretization is not None):
+            remainder = layer_end_time % layer_end_time_discretization
 
-            additional_dwell_to_add = toolpath_info['layer_end_time_discretization'] - remainder
+            additional_dwell_to_add = layer_end_time_discretization - remainder
 
             new_tpp += time_position_power_dwell(t_d1, pos, additional_dwell_to_add)
             section_start_time = new_tpp[-1][0]

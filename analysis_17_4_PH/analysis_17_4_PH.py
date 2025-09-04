@@ -58,7 +58,6 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
     print("Getting the time series...")
 
     iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))
-
     # Load first dataset (reference mesh)
     dataset_0 = pyvista.read(f"{directory}/{adamantine_filename}.{iteration_numbers[0]}.pvtu")
     n_points = dataset_0.number_of_points
@@ -69,8 +68,6 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
     # Preallocate tree query result (optional, for speed)
     distances = np.empty(n_points)
     nearest_indices = np.empty(n_points, dtype=int)
-
-
     ref_points = dataset_0.points
 
     for idx, iteration_number in enumerate(iteration_numbers):
@@ -90,6 +87,7 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
         val[idx] = dataset.point_data[field_name][nearest_indices]
 
     # Optional plotting for to see the single-point temperature history
+    line_plots = True
     if (line_plots):
         for i in range(min(5, val.shape[1])):  # plot first 5 points
             plt.figure()
@@ -177,7 +175,8 @@ def objective_17_4_PH(time_series):
     # Step through time
     for n in range(0, time_series.shape[1]):
         single_point_series = time_series[:,n]
-
+        print(f'The max temp at this time ind {n} information is {max(single_point_series)}, the min is {min(single_point_series)}, the average is {np.mean(single_point_series)}.')
+        print(f'For reference, Martensite temp is {T_Ms}, Precipitate is {T_ppt}, Solidus temp is {T_solidus}')
         has_melted = False
         is_martensite = False
 
@@ -198,10 +197,8 @@ def objective_17_4_PH(time_series):
 
 
 def plot_score_on_mesh(directory, adamantine_filename, per_point_scores):
-    iteration_numbers = get_iteration_count(directory + adamantine_filename)
-    filename = directory + adamantine_filename + '.' + str(iteration_numbers[0]) + '.pvtu'
-    dataset = pyvista.read(filename)
-
+    iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))
+    dataset = pyvista.read(f"{directory}/{adamantine_filename}.{iteration_numbers[0]}.pvtu")
     dataset.point_data['score'] = per_point_scores
     pl = pyvista.Plotter()
     dataset.set_active_scalars("score")
@@ -213,9 +210,9 @@ def plot_score_on_mesh(directory, adamantine_filename, per_point_scores):
 def analysis(directory, adamantine_filename, field_name, line_plots, volume_plot):
     #time_series = get_time_series(directory, adamantine_filename, field_name, line_plots)
     time_series = get_time_series_sort(directory, adamantine_filename, field_name, line_plots)
-
+    print(f"The time series being evaluated has {len(time_series)} times.")
     per_point_scores = objective_17_4_PH(time_series)
-
+    volume_plot = True
     if volume_plot:
         plot_score_on_mesh(directory, adamantine_filename, per_point_scores)
 

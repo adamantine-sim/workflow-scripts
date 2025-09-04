@@ -219,7 +219,7 @@ def generate_print_plan_file(toolpath_info, plan_filename):
     dwell_0       = toolpath_info['dwell_0']
     reheat_power  = toolpath_info['reheat_power']
     dwell_1       = toolpath_info['dwell_1']
-    num_layers = toolpath_info['num_layers']
+    num_layers = toolpath_info.get['num_layers']
 
     data = []
     for layer_idx in range(num_layers):

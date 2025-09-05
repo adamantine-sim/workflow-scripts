@@ -177,7 +177,7 @@ def pick_chunk(values: List[float], layer_idx: int, num_layers: int) -> float:
     cidx = min(int(layer_idx // width), n_chunks - 1)
     return values[cidx]
   
-def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, layer_end_time_discretization=None):
+def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, layer_end_time_discretization=None, layer_limit=None):
     toolpath_info = {}
     toolpath_info['print_path'] = print_path
     toolpath_info['reheat_path'] = reheat_path
@@ -191,9 +191,16 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, l
 
     toolpath_info['admissible_controls'] = ('reheat_power, dwell_0', 'dwell_1')
 
-    filename_pattern = 'layer_(\d+)_scan_path\.txt'
+    filename_pattern = r'layer_(\d+)_scan_path\.txt'
     filenames_print = get_sorted_layer_files(print_path, filename_pattern)
     filenames_reheat = get_sorted_layer_files(reheat_path, filename_pattern)
+
+    # Apply layer limit if given
+    if layer_limit is not None:
+        filenames_print = filenames_print[0:layer_limit+1]
+        filenames_reheat = filenames_reheat[0:layer_limit+1]
+
+    toolpath_info['num_layers'] = len(filenames_print)
 
     base_split_layers_print = []
     for file in filenames_print:
@@ -209,8 +216,6 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, l
     toolpath_info['base_split_layers_print'] = base_split_layers_print
     toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
     
-    toolpath_info['num_layers'] = len(base_split_layers_print)
-
     # By default, select all layers
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
     return toolpath_info
@@ -279,6 +284,7 @@ def create_toolpath(toolpath_info):
     section_start_time = 1e-10
     layer_end_times = []
     for layer_idx in range(*toolpath_info['selected_layers']):
+
         # 3a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
@@ -296,15 +302,11 @@ def create_toolpath(toolpath_info):
         new_tpp += slice_entries
         section_start_time = new_tpp[-1][0] + d0
         
-        # 3c) Skip dwell/reheat after the final printed layer NOTE: NO DATA, CHANGE EXP & REMOVE
-        if layer_idx == toolpath_info['selected_layers'][1] - 1:
-            continue
-
-        # 3d) First dwell + Reheat pass + second dwell (skip after last layer)
+        # 3c) First dwell + Reheat pass + second dwell 
         reheat = base_split_layers_reheat[layer_idx]
         reheat = update_power(reheat, rp)
         reheat = shift_time(reheat, section_start_time)
-        
+            
         new_tpp += reheat
 
         t_d1 = new_tpp[-1][0]
@@ -312,7 +314,7 @@ def create_toolpath(toolpath_info):
         new_tpp += time_position_power_dwell(t_d1, pos, d1)
         section_start_time = new_tpp[-1][0]
 
-        # 3e) Add an additional dwell at the end of the layer to hit the discretized layer time
+        # 3d) Add an additional dwell at the end of the layer to hit the discretized layer time
         layer_end_time = new_tpp[-1][0]
         if (toolpath_info['layer_end_time_discretization'] is not None):
             remainder = layer_end_time % toolpath_info['layer_end_time_discretization']
@@ -333,11 +335,12 @@ def create_toolpath(toolpath_info):
 def write_toolpath(toolpath_info):
     
     tpp_clean, layer_end_times = create_toolpath(toolpath_info)
+    print("layer end times", layer_end_times)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 
 
-def generate_control_options(layer_time_discretization, num_forward_sims, sampling_strategy, toolpath_info):
+def generate_control_options(layer_time_discretization, num_forward_sims, sampling_strategy, toolpath_info, planned_controls):
     
     def get_uniform_random_discrete_value(bounds, discrete_step):
         x = random.uniform(bounds[0], bounds[1])
@@ -349,7 +352,12 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
     dwell_1_bounds = (layer_time_discretization, 10*layer_time_discretization)
     reheat_power_bounds = (0.0, 500.0)
 
+    # The first entry should be the planned control
     modified_toolpath_info_list = []
+    modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
+    modified_toolpath_info_list[-1]['dwell_0'] = [planned_controls['dwell_0']]
+    modified_toolpath_info_list[-1]['dwell_1'] = [planned_controls['dwell_1']]
+    modified_toolpath_info_list[-1]['reheat_power'] = [planned_controls['power']]
 
     num_variables = 3
     num_adjacent_options = 2 * num_variables + 1
@@ -357,7 +365,7 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
 
     match sampling_strategy:
         case 'uniform_random':
-            for i in range(num_forward_sims):   
+            for i in range(num_forward_sims-1):   
                 
                 unique_parameter_set_found = False
                 counter = 0
@@ -376,11 +384,13 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
                                 print('Error: Unable to find enough unique random samples for the control simulations')
                                 sys.exit()
                             continue
-                        
+
+                    print("Control options:", dwell_0_val, dwell_1_val, reheat_val)
+
                     modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
-                    modified_toolpath_info_list[-1]['dwell_0'] = dwell_0_val
-                    modified_toolpath_info_list[-1]['dwell_1'] = dwell_1_val
-                    modified_toolpath_info_list[-1]['reheat_power'] = reheat_val
+                    modified_toolpath_info_list[-1]['dwell_0'] = [dwell_0_val]
+                    modified_toolpath_info_list[-1]['dwell_1'] = [dwell_1_val]
+                    modified_toolpath_info_list[-1]['reheat_power'] = [reheat_val]
                     unique_parameter_set_found = True
 
             return modified_toolpath_info_list
@@ -399,37 +409,3 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
             sys.exit()
     
     return modified_toolpath_info_list
-
-
-if __name__ == "__main__":
-    """
-    Quick test harness for write_toolpath():
-      - 4 chunks of dwell_0 = [20, 30, 40, 50]
-      - 4 chunks of reheat_power = [360, 450, 600, 800]
-      - 1 chunk of dwell_1 = [30]
-    Outputs scan_path_test.inp in this folder.
-    """
-    # assume this script lives next to print_layers/ and reheat_layers/
-    cwd = os.getcwd()
-    toolpath_info = {
-        'print_path'    : os.path.join(cwd, "print_layers"),
-        'reheat_path'   : os.path.join(cwd, "reheat_layers"),
-        'dwell_0'       : [20, 30, 40, 50],
-        'reheat_power'  : [360, 450, 600, 800],
-        'dwell_1'       : [30],
-        'scan_path_out' : "scan_path_test.inp"
-    }
-
-    print("Running write_toolpath test with:")
-    print(f"  dwell_0       = {toolpath_info['dwell_0']}")
-    print(f"  reheat_power  = {toolpath_info['reheat_power']}")
-    print(f"  dwell_1       = {toolpath_info['dwell_1']}")
-    print(f"  writing -> {toolpath_info['scan_path_out']}")
-
-    # call the core function
-    write_toolpath(toolpath_info)
-
-    if os.path.exists(toolpath_info['scan_path_out']):
-        print(":) scan_path_test.inp successfully written")
-    else:
-        print(":( failed to write scan_path_test.inp")

@@ -302,18 +302,17 @@ def create_toolpath(toolpath_info):
         new_tpp += slice_entries
         section_start_time = new_tpp[-1][0] + d0
         
-        # 3c) First dwell + Reheat pass + second dwell (skip after last layer)
-        if layer_idx < toolpath_info['num_layers']:
-            reheat = base_split_layers_reheat[layer_idx]
-            reheat = update_power(reheat, rp)
-            reheat = shift_time(reheat, section_start_time)
+        # 3c) First dwell + Reheat pass + second dwell 
+        reheat = base_split_layers_reheat[layer_idx]
+        reheat = update_power(reheat, rp)
+        reheat = shift_time(reheat, section_start_time)
             
-            new_tpp += reheat
+        new_tpp += reheat
 
-            t_d1 = new_tpp[-1][0]
-            pos  = new_tpp[-1][1]
-            new_tpp += time_position_power_dwell(t_d1, pos, d1)
-            section_start_time = new_tpp[-1][0]
+        t_d1 = new_tpp[-1][0]
+        pos  = new_tpp[-1][1]
+        new_tpp += time_position_power_dwell(t_d1, pos, d1)
+        section_start_time = new_tpp[-1][0]
 
         # 3d) Add an additional dwell at the end of the layer to hit the discretized layer time
         layer_end_time = new_tpp[-1][0]
@@ -336,11 +335,12 @@ def create_toolpath(toolpath_info):
 def write_toolpath(toolpath_info):
     
     tpp_clean, layer_end_times = create_toolpath(toolpath_info)
+    print("layer end times", layer_end_times)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 
 
-def generate_control_options(layer_time_discretization, num_forward_sims, sampling_strategy, toolpath_info):
+def generate_control_options(layer_time_discretization, num_forward_sims, sampling_strategy, toolpath_info, planned_controls):
     
     def get_uniform_random_discrete_value(bounds, discrete_step):
         x = random.uniform(bounds[0], bounds[1])
@@ -352,7 +352,12 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
     dwell_1_bounds = (layer_time_discretization, 10*layer_time_discretization)
     reheat_power_bounds = (0.0, 500.0)
 
+    # The first entry should be the planned control
     modified_toolpath_info_list = []
+    modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
+    modified_toolpath_info_list[-1]['dwell_0'] = [planned_controls['dwell_0']]
+    modified_toolpath_info_list[-1]['dwell_1'] = [planned_controls['dwell_1']]
+    modified_toolpath_info_list[-1]['reheat_power'] = [planned_controls['power']]
 
     num_variables = 3
     num_adjacent_options = 2 * num_variables + 1
@@ -360,7 +365,7 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
 
     match sampling_strategy:
         case 'uniform_random':
-            for i in range(num_forward_sims):   
+            for i in range(num_forward_sims-1):   
                 
                 unique_parameter_set_found = False
                 counter = 0
@@ -379,11 +384,13 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
                                 print('Error: Unable to find enough unique random samples for the control simulations')
                                 sys.exit()
                             continue
-                        
+
+                    print("Control options:", dwell_0_val, dwell_1_val, reheat_val)
+
                     modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
-                    modified_toolpath_info_list[-1]['dwell_0'] = dwell_0_val
-                    modified_toolpath_info_list[-1]['dwell_1'] = dwell_1_val
-                    modified_toolpath_info_list[-1]['reheat_power'] = reheat_val
+                    modified_toolpath_info_list[-1]['dwell_0'] = [dwell_0_val]
+                    modified_toolpath_info_list[-1]['dwell_1'] = [dwell_1_val]
+                    modified_toolpath_info_list[-1]['reheat_power'] = [reheat_val]
                     unique_parameter_set_found = True
 
             return modified_toolpath_info_list

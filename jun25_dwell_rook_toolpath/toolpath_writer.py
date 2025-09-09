@@ -311,12 +311,16 @@ def create_toolpath(toolpath_info):
     new_tpp = []
     section_start_time = 1e-10
     layer_end_times = []
+    base = round(num_layers/4)
+    targets = {base*k for k in (1,2,3)}
+    add_20s = toolpath_info.get('add_20s',False)
     for layer_idx in range(*toolpath_info['selected_layers']):
         # 5a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
         d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
-
+        if add_20s and (layer_idx in targets):
+            d0 = 1200.0
         # 3b) Print slice
         layer = base_split_layers_print[layer_idx]
         shifted = shift_time(layer, section_start_time)

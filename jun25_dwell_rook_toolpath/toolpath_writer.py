@@ -368,7 +368,7 @@ def create_toolpath(toolpath_info):
 def write_toolpath(toolpath_info):
     
     tpp_clean, layer_end_times = create_toolpath(toolpath_info)
-    print("layer end times", layer_end_times)
+    # print("layer end times", layer_end_times)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 

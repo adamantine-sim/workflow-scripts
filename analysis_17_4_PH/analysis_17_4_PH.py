@@ -58,7 +58,6 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
     print("Getting the time series...")
 
     iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))
-
     # Load first dataset (reference mesh)
     dataset_0 = pyvista.read(f"{directory}/{adamantine_filename}.{iteration_numbers[0]}.pvtu")
     n_points = dataset_0.number_of_points
@@ -69,8 +68,6 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
     # Preallocate tree query result (optional, for speed)
     distances = np.empty(n_points)
     nearest_indices = np.empty(n_points, dtype=int)
-
-
     ref_points = dataset_0.points
 
     for idx, iteration_number in enumerate(iteration_numbers):
@@ -90,6 +87,7 @@ def get_time_series(directory, adamantine_filename, field_name, line_plots):
         val[idx] = dataset.point_data[field_name][nearest_indices]
 
     # Optional plotting for to see the single-point temperature history
+    line_plots = True
     if (line_plots):
         for i in range(min(5, val.shape[1])):  # plot first 5 points
             plt.figure()
@@ -161,47 +159,36 @@ def get_time_series_sort(directory, adamantine_filename, field_name, line_plots)
 
 
 def objective_17_4_PH(time_series):
-    # NOTE: I have a special check in here to ignore cases where the temperature dips down below 5K to deal with artifacts
-    # in the data. I'm still not sure why those occur.
-
     K_to_C = 273.15
-
-    T_solidus = 1713.0 # Solidus temperature for 17-4PH
-    T_Ms = 150.0 + K_to_C # Martensite start temperature in K
-    T_ppt = 480.0 + K_to_C # Optimal temperature for precipitation
-    T_band_ppt = 50.0 # Width of the band around T_ppt that "count" for the objective function, this is the "diameter" of the band. The band has a hard upper limit at the reaustenization temperature
-    T_A = 550.0 + K_to_C # Re-austenization temperature
-
-    per_point_scores = np.zeros(time_series.shape[1])
+    T_Ms = 105.0 + K_to_C # Martensite start temperature in K
+    T_ppt = 522.5 + K_to_C # Optimal temperature for precipitation
+    T_band_ppt = 42.5 # Width of the band around T_ppt that "count" for the objective function, this is the "diameter" of the band. The band has a hard upper limit at the reaustenization temperature
+    T_A = 565.0 + K_to_C # Re-austenization temperature
     
+    # Track “have we been above Ms yet” to ensure martensite creation happens on cooling
+    T, N = time_series.shape
+    above_Ms_seen = np.zeros(N, dtype=bool)
+    martensite_on = np.zeros(N, dtype=bool)
+    scores = np.zeros(N, dtype=float)
+    previous_T = time_series[0,:]
     # Step through time
-    for n in range(0, time_series.shape[1]):
-        single_point_series = time_series[:,n]
-
-        has_melted = False
-        is_martensite = False
-
-        for temperature in single_point_series:
-            if temperature >= T_solidus:
-                    has_melted = True
-                    per_point_scores[n] = 0
-            elif has_melted and (not is_martensite):
-                if temperature > 5.0 and temperature < T_Ms:
-                    is_martensite = True
-            elif is_martensite:
-                if temperature > T_A:
-                    is_martensite = False
-                elif np.abs(temperature-T_ppt) < T_band_ppt/2.0:
-                    per_point_scores[n] = per_point_scores[n] + 1
-
-    return per_point_scores
-
+    for n in range(1,T):
+        all_points_at_time = time_series[n,:]
+        above_Ms_seen |= (all_points_at_time > T_Ms)
+        # Create martensite when we cross from above Ms to below Ms (cooling)
+        just_crossed_below_Ms = ((previous_T > T_Ms) & (all_points_at_time < T_Ms) & above_Ms_seen)
+        martensite_on |= just_crossed_below_Ms
+        # Reset point if reheated to A
+        martensite_on &= ~(all_points_at_time > T_A)
+         # Accumulate time in precipitation band only when classified as martensite
+        in_band = (all_points_at_time >= (T_ppt - T_band_ppt/2.0)) & (all_points_at_time <= (T_ppt + T_band_ppt/2.0))
+        scores += martensite_on * in_band
+        previous_T = all_points_at_time
+    return scores
 
 def plot_score_on_mesh(directory, adamantine_filename, per_point_scores):
-    iteration_numbers = get_iteration_count(directory + adamantine_filename)
-    filename = directory + adamantine_filename + '.' + str(iteration_numbers[0]) + '.pvtu'
-    dataset = pyvista.read(filename)
-
+    iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))
+    dataset = pyvista.read(f"{directory}/{adamantine_filename}.{iteration_numbers[0]}.pvtu")
     dataset.point_data['score'] = per_point_scores
     pl = pyvista.Plotter()
     dataset.set_active_scalars("score")
@@ -213,9 +200,9 @@ def plot_score_on_mesh(directory, adamantine_filename, per_point_scores):
 def analysis(directory, adamantine_filename, field_name, line_plots, volume_plot):
     #time_series = get_time_series(directory, adamantine_filename, field_name, line_plots)
     time_series = get_time_series_sort(directory, adamantine_filename, field_name, line_plots)
-
+    print(f"The time series being evaluated has {len(time_series)} times.")
     per_point_scores = objective_17_4_PH(time_series)
-
+    volume_plot = True
     if volume_plot:
         plot_score_on_mesh(directory, adamantine_filename, per_point_scores)
 

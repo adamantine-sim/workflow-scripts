@@ -172,8 +172,6 @@ def get_chunked_value(vals, location, chunk_locations):
     return val
 
 def pick_chunk(values: List[float], layer_idx: int, num_layers: int) -> float:
-    if isinstance(values, (int, float)):
-        return float(values)  # single value for all layers
     n_chunks = len(values)
     width = num_layers / n_chunks
     cidx = min(int(layer_idx // width), n_chunks - 1)
@@ -226,7 +224,7 @@ def generate_print_plan_file(toolpath_info, plan_filename):
     dwell_0       = toolpath_info['dwell_0']
     reheat_power  = toolpath_info['reheat_power']
     dwell_1       = toolpath_info['dwell_1']
-    num_layers = toolpath_info.get('num_layers')
+    num_layers = toolpath_info.get['num_layers']
 
     data = []
     for layer_idx in range(num_layers):
@@ -254,23 +252,22 @@ def create_toolpath(toolpath_info):
       - shifting times accordingly
     """
     # 1) Unpack inputs
-    print_path                    = toolpath_info['print_path']
-    reheat_path                   = toolpath_info['reheat_path']
-    dwell_0                       = toolpath_info['dwell_0']
-    reheat_power                  = toolpath_info['reheat_power']
-    dwell_1                       = toolpath_info['dwell_1']
-    includes_end_message          = toolpath_info.get('includes_end_message', True)
-    layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', 5.0)
-    set_dwell_every_n_layers      = toolpath_info.get('set_dwell_every_n_layers')
-    base_split_layers_print       = toolpath_info.get('base_split_layers_print')
-    base_split_layers_reheat      = toolpath_info.get('base_split_layers_reheat')
-    num_layers                    = toolpath_info.get('num_layers')
-    selected_layers               = toolpath_info.get('selected_layers')  # tuple (start, end)
+    print_path    = toolpath_info['print_path']
+    reheat_path   = toolpath_info['reheat_path']
+    dwell_0       = toolpath_info['dwell_0']
+    reheat_power  = toolpath_info['reheat_power']
+    dwell_1       = toolpath_info['dwell_1']
+    num_layers = toolpath_info['num_layers']
+    base_split_layers_print = toolpath_info['base_split_layers_print']
+    base_split_layers_reheat = toolpath_info['base_split_layers_reheat']
 
     # 2) Discover peeled layer files
     filename_pattern = r'layer_(\d+)_scan_path\.txt'
+    #filenames_print  = get_sorted_layer_files(print_path, filename_pattern)
+    #filenames_reheat = get_sorted_layer_files(reheat_path, filename_pattern)
+    
     # grab the raw filenames
-    raw_print_files  = get_sorted_layer_files(print_path, filename_pattern)
+    raw_print_files = get_sorted_layer_files(print_path, filename_pattern)
     raw_reheat_files = get_sorted_layer_files(reheat_path, filename_pattern)
     # then sort them by the integer captured in the filename
     filenames_print = sorted(
@@ -282,52 +279,22 @@ def create_toolpath(toolpath_info):
         key=lambda fn: int(re.match(r'layer_(\d+)_scan_path\.txt', fn).group(1))
     )
     
-    # 3) load the base_split_layers_* if not defined in parameters
-    if base_split_layers_print is None:
-        base_split_layers_print = [
-            get_time_position_power_inp(os.path.join(print_path, fn))
-            for fn in filenames_print
-        ]
-        toolpath_info['base_split_layers_print'] = base_split_layers_print 
-
-    if base_split_layers_reheat is None:
-        base_split_layers_reheat = [
-            get_time_position_power_inp(os.path.join(reheat_path, fn))
-            for fn in filenames_reheat
-        ]
-        toolpath_info['base_split_layers_reheat'] = base_split_layers_reheat
-    
-    # 4) Infer the number of layers and selected layers if not set in parameters
-    if num_layers is None:
-        num_layers = len(base_split_layers_print)
-        toolpath_info['num_layers'] = num_layers
-
-    if selected_layers is None:
-        selected_layers = (0, num_layers)
-        toolpath_info['selected_layers'] = selected_layers
-   
-    
-    # 5) Build the new time–position–power series
+    # 3) Build the new time–position–power series
     new_tpp = []
     section_start_time = 1e-10
     layer_end_times = []
-    base = round(num_layers/4)
-    targets = {base*k for k in (1,2,3)}
-    add_20s = toolpath_info.get('add_20s',False)
     for layer_idx in range(*toolpath_info['selected_layers']):
-        # 5a) Pick parameters for this layer
+
+        # 3a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
         d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
-        if add_20s and (layer_idx in targets):
-            d0 = 1200.0
+
         # 3b) Print slice
         layer = base_split_layers_print[layer_idx]
         shifted = shift_time(layer, section_start_time)
-        
         # start-of-slice power toggle
         slice_entries = add_power_off_entry(shifted)
-        
         # ensure the very last print-point has power=0.0
         if slice_entries:
             t_last, pos_last, _ = slice_entries[-1]
@@ -347,12 +314,12 @@ def create_toolpath(toolpath_info):
         new_tpp += time_position_power_dwell(t_d1, pos, d1)
         section_start_time = new_tpp[-1][0]
 
-        # 5e) Add an additional dwell at the end of the layer to hit the discretized layer time
+        # 3d) Add an additional dwell at the end of the layer to hit the discretized layer time
         layer_end_time = new_tpp[-1][0]
-        if (layer_end_time_discretization is not None):
-            remainder = layer_end_time % layer_end_time_discretization
+        if (toolpath_info['layer_end_time_discretization'] is not None):
+            remainder = layer_end_time % toolpath_info['layer_end_time_discretization']
 
-            additional_dwell_to_add = layer_end_time_discretization - remainder
+            additional_dwell_to_add = toolpath_info['layer_end_time_discretization'] - remainder
 
             new_tpp += time_position_power_dwell(t_d1, pos, additional_dwell_to_add)
             section_start_time = new_tpp[-1][0]
@@ -360,7 +327,7 @@ def create_toolpath(toolpath_info):
 
         layer_end_times.append(layer_end_time)
 
-    # 6) Clean up and return
+    # 4) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)
 
     return tpp_clean, layer_end_times
@@ -368,7 +335,7 @@ def create_toolpath(toolpath_info):
 def write_toolpath(toolpath_info):
     
     tpp_clean, layer_end_times = create_toolpath(toolpath_info)
-    # print("layer end times", layer_end_times)
+    print("layer end times", layer_end_times)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])
 

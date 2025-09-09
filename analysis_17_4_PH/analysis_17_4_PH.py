@@ -159,42 +159,32 @@ def get_time_series_sort(directory, adamantine_filename, field_name, line_plots)
 
 
 def objective_17_4_PH(time_series):
-    # NOTE: I have a special check in here to ignore cases where the temperature dips down below 5K to deal with artifacts
-    # in the data. I'm still not sure why those occur.
-
     K_to_C = 273.15
-
-    T_solidus = 1713.0 # Solidus temperature for 17-4PH
     T_Ms = 105.0 + K_to_C # Martensite start temperature in K
-    T_ppt = 480.0 + K_to_C # Optimal temperature for precipitation
-    T_band_ppt = 50.0 # Width of the band around T_ppt that "count" for the objective function, this is the "diameter" of the band. The band has a hard upper limit at the reaustenization temperature
-    T_A = 550.0 + K_to_C # Re-austenization temperature
-
-    per_point_scores = np.zeros(time_series.shape[1])
+    T_ppt = 522.5 + K_to_C # Optimal temperature for precipitation
+    T_band_ppt = 42.5 # Width of the band around T_ppt that "count" for the objective function, this is the "diameter" of the band. The band has a hard upper limit at the reaustenization temperature
+    T_A = 565.0 + K_to_C # Re-austenization temperature
     
+    # Track “have we been above Ms yet” to ensure martensite creation happens on cooling
+    T, N = time_series.shape
+    above_Ms_seen = np.zeros(N, dtype=bool)
+    martensite_on = np.zeros(N, dtype=bool)
+    scores = np.zeros(N, dtype=float)
+    previous_T = time_series[0,:]
     # Step through time
-    for n in range(0, time_series.shape[1]):
-        single_point_series = time_series[:,n]
-        print(f'The max temp at this time ind {n} information is {max(single_point_series)}, the min is {min(single_point_series)}, the average is {np.mean(single_point_series)}.')
-        print(f'For reference, Martensite temp is {T_Ms}, Precipitate is {T_ppt}, Solidus temp is {T_solidus}')
-        has_melted = False
-        is_martensite = False
-
-        for temperature in single_point_series:
-            if temperature >= T_solidus:
-                    has_melted = True
-                    per_point_scores[n] = 0
-            elif has_melted and (not is_martensite):
-                if temperature > 5.0 and temperature < T_Ms:
-                    is_martensite = True
-            elif is_martensite:
-                if temperature > T_A:
-                    is_martensite = False
-                elif np.abs(temperature-T_ppt) < T_band_ppt/2.0:
-                    per_point_scores[n] = per_point_scores[n] + 1
-
-    return per_point_scores
-
+    for n in range(1,T):
+        all_points_at_time = time_series[n,:]
+        above_Ms_seen |= (all_points_at_time > T_Ms)
+        # Create martensite when we cross from above Ms to below Ms (cooling)
+        just_crossed_below_Ms = ((previous_T > T_Ms) & (all_points_at_time < T_Ms) & above_Ms_seen)
+        martensite_on |= just_crossed_below_Ms
+        # Reset point if reheated to A
+        martensite_on &= ~(all_points_at_time > T_A)
+         # Accumulate time in precipitation band only when classified as martensite
+        in_band = (all_points_at_time >= (T_ppt - T_band_ppt/2.0)) & (all_points_at_time <= (T_ppt + T_band_ppt/2.0))
+        scores += martensite_on * in_band
+        previous_T = all_points_at_time
+    return scores
 
 def plot_score_on_mesh(directory, adamantine_filename, per_point_scores):
     iteration_numbers = get_iteration_count(os.path.join(directory, adamantine_filename))

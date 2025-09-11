@@ -321,7 +321,10 @@ def create_toolpath(toolpath_info):
             
         # 5b) Print slice
         layer = base_split_layers_print[layer_idx]
-        shifted = shift_time(layer, section_start_time+d0)
+        if layer_idx > 1:
+            shifted = shift_time(layer, section_start_time+d0)
+        else:
+            shifted = shift_time(layer, section_start_time)
         
         # start-of-slice power toggle
         slice_entries = add_power_off_entry(shifted)

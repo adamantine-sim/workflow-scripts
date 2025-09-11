@@ -73,9 +73,14 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         # ----------------------------------------------------------
 
         # Skip field plots if there are no rayfiles to give the camera position
+        no_rayfile = False
+        print('HERE!')
         if plot_sim_field or plot_expt_field:
+            print("NOW HERE")
             if not os.path.exists(rayfile):
-                plot_sim_field = False
+                print("Shadow analysis can't find rayfile!")
+                #plot_sim_field = False
+                no_rayfile = True
                 plot_expt_field = False
             else:
                 # Check that the rayfile isn't still being written
@@ -123,20 +128,21 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
         time_sim_field_start = time.perf_counter()
 
         if plot_sim_field or plot_expt_field:
-            # Extract the camera position from the rayfile
-            with open(rayfile, mode='r') as file:
-                reader = csv.reader(file)
-                next(reader)  # Skip the header line
-                second_line = next(reader)  # Read the second line
+            if not no_rayfile:
+                # Extract the camera position from the rayfile
+                with open(rayfile, mode='r') as file:
+                    reader = csv.reader(file)
+                    next(reader)  # Skip the header line
+                    second_line = next(reader)  # Read the second line
 
-            view_from_rayfile_string = second_line[:3]
-            view_from_rayfile = [float(x) for x in view_from_rayfile_string]
+                view_from_rayfile_string = second_line[:3]
+                view_from_rayfile = [float(x) for x in view_from_rayfile_string]
 
-            direction_from_rayfile_string = second_line[3:6]
-            direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
+                direction_from_rayfile_string = second_line[3:6]
+                direction_from_rayfile = [float(x) for x in direction_from_rayfile_string]
 
-            view = tuple(view_from_rayfile)
-            direction = tuple(direction_from_rayfile)
+                view = tuple(view_from_rayfile)
+                direction = tuple(direction_from_rayfile)
 
             # Auto-detect the number of MPI domains
             filename_pattern = path_to_adamantine_files + adamantine_filename + '_m0.*.*.vtu'   
@@ -184,13 +190,14 @@ def shadow_analysis(plot_sim_field, plot_expt_field, plot_single_time_series, pl
             # same camera distance as the auto choice, but going backward from the origin to the camera location.
 
             distance_auto = pl.camera.distance
-            direction = np.array(view) - np.array((0.,0.,0.))
-            actual_distance = np.linalg.norm(direction)
-            direction = direction / actual_distance
-            view_distance = 0.0 * distance_auto + 1.0 * actual_distance
-            camera_position_new = (direction[0]*view_distance, direction[1]*view_distance, direction[2]*view_distance)
             
-            pl.camera.position = tuple(camera_position_new)
+            if not no_rayfile:
+                direction = np.array(view) - np.array((0.,0.,0.))
+                actual_distance = np.linalg.norm(direction)
+                direction = direction / actual_distance
+                view_distance = 0.0 * distance_auto + 1.0 * actual_distance
+                camera_position_new = (direction[0]*view_distance, direction[1]*view_distance, direction[2]*view_distance)
+                pl.camera.position = tuple(camera_position_new)
             pl.camera.focal_point = (0, 0, 0)
             pl.camera.zoom(plotting_zoom)
 

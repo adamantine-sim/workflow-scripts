@@ -346,8 +346,8 @@ def create_toolpath(toolpath_info):
         pos = new_tpp[-1][1]
 
         # Dwell 1
-        if d1 > 0.0:
-            new_tpp += time_position_power_dwell(layer_end_time, pos, d1)
+        if d1[0] > 0.0:
+            new_tpp += time_position_power_dwell(layer_end_time, pos, d1[0])
             layer_end_time = new_tpp[-1][0]
 
         # Snap to discretization (optional)

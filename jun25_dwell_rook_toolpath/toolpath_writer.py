@@ -313,7 +313,7 @@ def create_toolpath(toolpath_info):
         # 5a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
-        d1 = dwell_1 #pick_chunk(dwell_1,      layer_idx, num_layers)
+        d1 = float(dwell_1[0]) #pick_chunk(dwell_1,      layer_idx, num_layers)
         # If we happen to be at the start of one of the sections, add a 20 min dwell instead of the optimized dwell.
         if set_dwell_every_n_layers and ((layer_idx + 1) in quarter_layers_1based):
             d0 = 1200.0
@@ -454,7 +454,7 @@ if __name__ == "__main__":
         'reheat_path'   : os.path.join(cwd, "reheat_layers"),
         'dwell_0'       : [20, 30, 40, 50],
         'reheat_power'  : [360, 450, 600, 800],
-        'dwell_1'       : 20,
+        'dwell_1'       : [20],
         'scan_path_out' : "scan_path_test.inp",
         'includes_end_message': True,
         'set_dwell_every_n_layers': True

@@ -92,21 +92,15 @@ def split_into_layers(time_position_power, epsilon=0.001):
 
 
 def time_position_power_dwell(start_time, position, duration):
-
-    #print("start time", start_time)
-    #print("duration", duration)
     dwell_segment = [(start_time+duration, position, 0.0)]
-
     return dwell_segment
 
 def update_power(time_position_power, power):
     out = []
-
     for entry in time_position_power:
         #print("entry", entry)
         new_entry = (entry[0], entry[1], power)
         out.append(new_entry)
-
     return out
 
 def shift_time(layer, new_start_time, eps=1e-12):
@@ -260,7 +254,7 @@ def create_toolpath(toolpath_info):
     reheat_power                  = toolpath_info['reheat_power']
     dwell_1                       = toolpath_info['dwell_1']
     includes_end_message          = toolpath_info.get('includes_end_message', True)
-    layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', 5.0)
+    layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', None)
     set_dwell_every_n_layers      = toolpath_info.get('set_dwell_every_n_layers')
     base_split_layers_print       = toolpath_info.get('base_split_layers_print')
     base_split_layers_reheat      = toolpath_info.get('base_split_layers_reheat')
@@ -311,19 +305,26 @@ def create_toolpath(toolpath_info):
     new_tpp = []
     section_start_time = 1e-10
     layer_end_times = []
-    base = round(num_layers/4)
-    targets = {base*k for k in (1,2,3)}
-    add_20s = toolpath_info.get('add_20s',False)
+    # quarters: 1/4, 2/4, 3/4 of the layer count
+    q = num_layers // 4  # integer floor, stable
+    quarter_layers_1based = {q*1, q*2, q*3}
+    
     for layer_idx in range(*toolpath_info['selected_layers']):
         # 5a) Pick parameters for this layer
         d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
-        d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
-        if add_20s and (layer_idx in targets):
+        d1 = dwell_1 #pick_chunk(dwell_1,      layer_idx, num_layers)
+        # If we happen to be at the start of one of the sections, add a 20 min dwell instead of the optimized dwell.
+        if set_dwell_every_n_layers and ((layer_idx + 1) in quarter_layers_1based):
             d0 = 1200.0
-        # 3b) Print slice
+            
+            
+        # 5b) Print slice
         layer = base_split_layers_print[layer_idx]
-        shifted = shift_time(layer, section_start_time)
+        if layer_idx > 1:
+            shifted = shift_time(layer, section_start_time+d0)
+        else:
+            shifted = shift_time(layer, section_start_time)
         
         # start-of-slice power toggle
         slice_entries = add_power_off_entry(shifted)
@@ -333,35 +334,37 @@ def create_toolpath(toolpath_info):
             t_last, pos_last, _ = slice_entries[-1]
             slice_entries[-1] = (t_last, pos_last, 0.0)    
         new_tpp += slice_entries
-        section_start_time = new_tpp[-1][0] + d0
-        
-        # 3c) First dwell + Reheat pass + second dwell 
+        section_start_time = new_tpp[-1][0]
+        # 5c) First dwell + Reheat pass + second dwell 
         reheat = base_split_layers_reheat[layer_idx]
         reheat = update_power(reheat, rp)
         reheat = shift_time(reheat, section_start_time)
-            
         new_tpp += reheat
 
-        t_d1 = new_tpp[-1][0]
-        pos  = new_tpp[-1][1]
-        new_tpp += time_position_power_dwell(t_d1, pos, d1)
-        section_start_time = new_tpp[-1][0]
-
-        # 5e) Add an additional dwell at the end of the layer to hit the discretized layer time
+        # End of reheat
         layer_end_time = new_tpp[-1][0]
-        if (layer_end_time_discretization is not None):
-            remainder = layer_end_time % layer_end_time_discretization
+        pos = new_tpp[-1][1]
 
-            additional_dwell_to_add = layer_end_time_discretization - remainder
-
-            new_tpp += time_position_power_dwell(t_d1, pos, additional_dwell_to_add)
-            section_start_time = new_tpp[-1][0]
+        # Dwell 1
+        if d1 > 0.0:
+            new_tpp += time_position_power_dwell(layer_end_time, pos, d1)
             layer_end_time = new_tpp[-1][0]
 
+        # Snap to discretization (optional)
+        if layer_end_time_discretization is not None:
+            remainder = layer_end_time % layer_end_time_discretization
+            # add only the needed remainder; 0 if already on-grid
+            additional = (layer_end_time_discretization - remainder) % layer_end_time_discretization
+            if additional > 0.0:
+                new_tpp += time_position_power_dwell(layer_end_time, pos, additional)
+                layer_end_time = new_tpp[-1][0]
+
+        section_start_time = layer_end_time
         layer_end_times.append(layer_end_time)
 
     # 6) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)
+    #tpp_clean = new_tpp
 
     return tpp_clean, layer_end_times
 
@@ -442,3 +445,56 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
             sys.exit()
     
     return modified_toolpath_info_list
+    
+    
+if __name__ == "__main__":
+    cwd = os.getcwd()
+    toolpath_info = {
+        'print_path'    : os.path.join(cwd, "print_layers"),
+        'reheat_path'   : os.path.join(cwd, "reheat_layers"),
+        'dwell_0'       : [20, 30, 40, 50],
+        'reheat_power'  : [360, 450, 600, 800],
+        'dwell_1'       : 20,
+        'scan_path_out' : "scan_path_test.inp",
+        'includes_end_message': True,
+        'set_dwell_every_n_layers': True
+    }    
+    print("Running write_toolpath test with:")
+    print(f"  dwell_0       = {toolpath_info['dwell_0']}")
+    print(f"  reheat_power  = {toolpath_info['reheat_power']}")
+    print(f"  dwell_1       = {toolpath_info['dwell_1']}")
+    print(f"  writing -> {toolpath_info['scan_path_out']}")    
+    # call the core function    
+    write_toolpath(toolpath_info)    
+    if os.path.exists(toolpath_info['scan_path_out']):
+        print(":) scan_path_test.inp successfully written")
+    else:
+        print(":( failed to write scan_path_test.inp")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

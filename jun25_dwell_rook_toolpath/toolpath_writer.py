@@ -381,9 +381,9 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
         return out
 
 
-    dwell_0_bounds = (layer_time_discretization, 10*layer_time_discretization)
-    dwell_1_bounds = (layer_time_discretization, 10*layer_time_discretization)
-    reheat_power_bounds = (0.0, 500.0)
+    dwell_0_bounds = (layer_time_discretization, 12*layer_time_discretization)
+    dwell_1_bounds = (layer_time_discretization, 12*layer_time_discretization)
+    reheat_power_bounds = (0.0, 1350.0)
 
     # The first entry should be the planned control
     modified_toolpath_info_list = []

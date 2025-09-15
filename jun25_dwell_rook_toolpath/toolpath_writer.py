@@ -216,7 +216,7 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, l
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
     return toolpath_info
 
-def generate_print_plan_file(toolpath_info, plan_filename):
+def generate_print_plan_file(toolpath_info, plan_filename, layer_padding=None):
     dwell_0       = toolpath_info['dwell_0']
     reheat_power  = toolpath_info['reheat_power']
     dwell_1       = toolpath_info['dwell_1']
@@ -228,11 +228,15 @@ def generate_print_plan_file(toolpath_info, plan_filename):
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
         d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
 
+        padded_d1 = d1
+        if layer_padding is not None:
+            padded_d1 = padded_d1 + layer_padding[layer_idx]
+
         entry = {
             "layer": layer_idx,
             "power": rp,
             "dwell_0": d0,
-            "dwell_1": d1
+            "dwell_1": padded_d1
         }
         data.append(entry)
 
@@ -308,6 +312,7 @@ def create_toolpath(toolpath_info):
     # quarters: 1/4, 2/4, 3/4 of the layer count
     q = num_layers // 4  # integer floor, stable
     quarter_layers_1based = {q*1, q*2, q*3}
+    actual_layer_variables = []
     
     for layer_idx in range(*toolpath_info['selected_layers']):
         # 5a) Pick parameters for this layer
@@ -317,7 +322,6 @@ def create_toolpath(toolpath_info):
         # If we happen to be at the start of one of the sections, add a 20 min dwell instead of the optimized dwell.
         if set_dwell_every_n_layers and ((layer_idx + 1) in quarter_layers_1based):
             d0 = 1200.0
-            
             
         # 5b) Print slice
         layer = base_split_layers_print[layer_idx]
@@ -351,6 +355,8 @@ def create_toolpath(toolpath_info):
             layer_end_time = new_tpp[-1][0]
 
         # Snap to discretization (optional)
+        print("layer end time before padding", layer_end_time)
+        additional = 0.0
         if layer_end_time_discretization is not None:
             remainder = layer_end_time % layer_end_time_discretization
             # add only the needed remainder; 0 if already on-grid
@@ -358,19 +364,22 @@ def create_toolpath(toolpath_info):
             if additional > 0.0:
                 new_tpp += time_position_power_dwell(layer_end_time, pos, additional)
                 layer_end_time = new_tpp[-1][0]
+            print("layer end time after padding", layer_end_time, additional)
 
         section_start_time = layer_end_time
         layer_end_times.append(layer_end_time)
+
+        actual_layer_variables.append({"dwell_0": [d0], "dwell_1": [d1[0]+additional], "reheat_power": reheat_power})
 
     # 6) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)
     #tpp_clean = new_tpp
 
-    return tpp_clean, layer_end_times
+    return tpp_clean, layer_end_times, actual_layer_variables
 
 def write_toolpath(toolpath_info):
     
-    tpp_clean, layer_end_times = create_toolpath(toolpath_info)
+    tpp_clean, layer_end_times, layer_padding = create_toolpath(toolpath_info)
     # print("layer end times", layer_end_times)
 
     write_event_series(tpp_clean, toolpath_info['scan_path_out'], toolpath_info['includes_end_message'])

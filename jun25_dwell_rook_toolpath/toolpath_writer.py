@@ -452,9 +452,9 @@ if __name__ == "__main__":
     toolpath_info = {
         'print_path'    : os.path.join(cwd, "print_layers"),
         'reheat_path'   : os.path.join(cwd, "reheat_layers"),
-        'dwell_0'       : [20, 30, 40, 50],
-        'reheat_power'  : [360, 450, 600, 800],
-        'dwell_1'       : [20],
+        'dwell_0'       : [16.11, 16.11, 16.11, 16.11],
+        'reheat_power'  : [900, 900, 900, 900],
+        'dwell_1'       : [0.28],
         'scan_path_out' : "scan_path_test.inp",
         'includes_end_message': True,
         'set_dwell_every_n_layers': True
@@ -472,8 +472,11 @@ if __name__ == "__main__":
         print(":( failed to write scan_path_test.inp")
     
     
-    
-    
+    '''
+    	'dwell_0'       : [111.95093, 46.80592, 98.10942, 48.97092],
+        'reheat_power'  : [990.72487, 687.35519, 531.07650, 1340.78436],
+        'dwell_1'       : [55.20886],
+    '''
     
     
     

@@ -216,7 +216,7 @@ def get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power, l
     toolpath_info['selected_layers'] = (0, toolpath_info['num_layers'])
     return toolpath_info
 
-def generate_print_plan_file(toolpath_info, plan_filename, layer_padding=None):
+def generate_print_plan_file(toolpath_info, plan_filename, actual_layer_variables=None):
     dwell_0       = toolpath_info['dwell_0']
     reheat_power  = toolpath_info['reheat_power']
     dwell_1       = toolpath_info['dwell_1']
@@ -228,15 +228,15 @@ def generate_print_plan_file(toolpath_info, plan_filename, layer_padding=None):
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
         d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
 
-        padded_d1 = d1
-        if layer_padding is not None:
-            padded_d1 = padded_d1 + layer_padding[layer_idx]
+        if actual_layer_variables is not None:
+            d1 = actual_layer_variables[layer_idx]['dwell_1']
+            d0 = actual_layer_variables[layer_idx]['dwell_0']
 
         entry = {
             "layer": layer_idx,
             "power": rp,
             "dwell_0": d0,
-            "dwell_1": padded_d1
+            "dwell_1": d1
         }
         data.append(entry)
 

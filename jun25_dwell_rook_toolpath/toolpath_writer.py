@@ -96,11 +96,19 @@ def time_position_power_dwell(start_time, position, duration):
     return dwell_segment
 
 def update_power(time_position_power, power):
+    # if max power is 0, assume we need to update all power
+    if np.max([tpp[2] for tpp in time_position_power]) == 0:
+        out = [(tpp[0], tpp[1], power) for tpp in time_position_power]
+        return out
+
+    # else update only non-zero powers
     out = []
     for entry in time_position_power:
-        #print("entry", entry)
-        new_entry = (entry[0], entry[1], power)
-        out.append(new_entry)
+        if entry[2] > 0:
+            new_entry = (entry[0], entry[1], power)
+            out.append(new_entry)
+        else:
+            out.append(entry)
     return out
 
 def shift_time(layer, new_start_time, eps=1e-12):
@@ -253,6 +261,9 @@ def create_toolpath(toolpath_info):
     dwell_0                       = toolpath_info['dwell_0']
     reheat_power                  = toolpath_info['reheat_power']
     dwell_1                       = toolpath_info['dwell_1']
+    dwell_0_offset                = toolpath_info['dwell_0_offset']
+    dwell_1_offset                = toolpath_info['dwell_1_offset']
+    dwell_section_offset          = toolpath_info['dwell_section_offset']
     includes_end_message          = toolpath_info.get('includes_end_message', True)
     layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', None)
     set_dwell_every_n_layers      = toolpath_info.get('set_dwell_every_n_layers')
@@ -310,30 +321,33 @@ def create_toolpath(toolpath_info):
     quarter_layers_1based = {q*1, q*2, q*3}
     
     for layer_idx in range(*toolpath_info['selected_layers']):
+        print(f'writing layer idx {layer_idx}')
         # 5a) Pick parameters for this layer
-        d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
+        d0 = pick_chunk(dwell_0,      layer_idx, num_layers) + dwell_0_offset
         rp = pick_chunk(reheat_power, layer_idx, num_layers)
-        d1 = float(dwell_1[0]) #pick_chunk(dwell_1,      layer_idx, num_layers)
+        d1 = pick_chunk(dwell_1,      layer_idx, num_layers) + dwell_1_offset
         # If we happen to be at the start of one of the sections, add a 20 min dwell instead of the optimized dwell.
-        if set_dwell_every_n_layers and ((layer_idx + 1) in quarter_layers_1based):
-            d0 = 1200.0
-            
+        if set_dwell_every_n_layers and ((layer_idx + 2) in quarter_layers_1based):
+            print(f'adjusting d1 to 20min for layer_idx {layer_idx}')
+            d1 = 1200.0 + dwell_section_offset + dwell_1_offset # measured offset...
             
         # 5b) Print slice
         layer = base_split_layers_print[layer_idx]
-        if layer_idx > 1:
-            shifted = shift_time(layer, section_start_time+d0)
-        else:
-            shifted = shift_time(layer, section_start_time)
+        shifted = shift_time(layer, section_start_time)
         
         # start-of-slice power toggle
         slice_entries = add_power_off_entry(shifted)
         
-        # ensure the very last print-point has power=0.0
+        # ensure the very last print-point has power=0.0 # XXX is this done twice with add_power_off_entry?
         if slice_entries:
             t_last, pos_last, _ = slice_entries[-1]
             slice_entries[-1] = (t_last, pos_last, 0.0)    
         new_tpp += slice_entries
+
+        # Add dwell_0, after layer prints
+        if d0 > 0.0:
+            new_tpp += time_position_power_dwell(new_tpp[-1][0], new_tpp[-1][1], d0)
+
         section_start_time = new_tpp[-1][0]
         # 5c) First dwell + Reheat pass + second dwell 
         reheat = base_split_layers_reheat[layer_idx]
@@ -452,9 +466,22 @@ if __name__ == "__main__":
     toolpath_info = {
         'print_path'    : os.path.join(cwd, "print_layers"),
         'reheat_path'   : os.path.join(cwd, "reheat_layers"),
-        'dwell_0'       : [16.11, 16.11, 16.11, 16.11],
+        
+        # U6
+        'dwell_0'       : [5, 5, 5, 5],
         'reheat_power'  : [900, 900, 900, 900],
-        'dwell_1'       : [0.28],
+        'dwell_1'       : [5],
+
+        # Preopt / O1
+    	# 'dwell_0'       : [111.95093, 46.80592, 98.10942, 48.97092],
+        # 'reheat_power'  : [990.72487, 687.35519, 531.07650, 1340.78436],
+        # 'dwell_1'       : [55.20886],
+
+        # experimentally tuned to minimize lags
+        'dwell_0_offset'       : 0.586,
+        'dwell_1_offset'       : 0.7375,
+        'dwell_section_offset' : -1.94,
+
         'scan_path_out' : "scan_path_test.inp",
         'includes_end_message': True,
         'set_dwell_every_n_layers': True
@@ -473,6 +500,7 @@ if __name__ == "__main__":
     
     
     '''
+    preopt
     	'dwell_0'       : [111.95093, 46.80592, 98.10942, 48.97092],
         'reheat_power'  : [990.72487, 687.35519, 531.07650, 1340.78436],
         'dwell_1'       : [55.20886],

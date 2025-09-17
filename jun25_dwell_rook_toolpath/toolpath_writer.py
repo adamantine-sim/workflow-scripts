@@ -242,7 +242,7 @@ def generate_print_plan_file(toolpath_info, plan_filename, actual_layer_variable
 
         entry = {
             "layer": layer_idx,
-            "power": rp,
+            "reheat_power": rp,
             "dwell_0": d0,
             "dwell_1": d1
         }
@@ -275,6 +275,12 @@ def create_toolpath(toolpath_info):
     base_split_layers_reheat      = toolpath_info.get('base_split_layers_reheat')
     num_layers                    = toolpath_info.get('num_layers')
     selected_layers               = toolpath_info.get('selected_layers')  # tuple (start, end)
+
+    if isinstance(dwell_0, list):
+        dwell_0 = dwell_0[0]
+
+    if isinstance(dwell_1, list):
+        dwell_1 = dwell_1[0]
 
     # 2) Discover peeled layer files
     filename_pattern = r'layer_(\d+)_scan_path\.txt'
@@ -328,9 +334,9 @@ def create_toolpath(toolpath_info):
     for layer_idx in range(*toolpath_info['selected_layers']):
         print(f'writing layer idx {layer_idx}')
         # 5a) Pick parameters for this layer
-        d0 = pick_chunk(dwell_0,      layer_idx+2, num_layers) + dwell_0_offset
+        d0 = pick_chunk(dwell_0,      layer_idx+2, num_layers) #+ [dwell_0_offset]
         rp = pick_chunk(reheat_power, layer_idx+2, num_layers)
-        d1 = pick_chunk(dwell_1,      layer_idx+2, num_layers) + dwell_1_offset
+        d1 = pick_chunk(dwell_1,      layer_idx+2, num_layers) #+ [dwell_1_offset]
         # If we happen to be at the start of one of the sections, add a 20 min dwell instead of the optimized dwell.
         if set_dwell_every_n_layers and ((layer_idx + 2) in quarter_layers_1based):
             print(f'adjusting d1 to 20min for layer_idx {layer_idx}')
@@ -417,7 +423,7 @@ def generate_control_options(layer_time_discretization, num_forward_sims, sampli
     modified_toolpath_info_list.append(copy.deepcopy(toolpath_info))
     modified_toolpath_info_list[-1]['dwell_0'] = [planned_controls['dwell_0']]
     modified_toolpath_info_list[-1]['dwell_1'] = [planned_controls['dwell_1']]
-    modified_toolpath_info_list[-1]['reheat_power'] = [planned_controls['power']]
+    modified_toolpath_info_list[-1]['reheat_power'] = [planned_controls['reheat_power']]
 
     num_variables = 3
     num_adjacent_options = 2 * num_variables + 1

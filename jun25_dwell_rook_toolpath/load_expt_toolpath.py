@@ -210,10 +210,10 @@ if __name__ == "__main__":
 
     flatten_and_subtract_off_nominal_dwells("", dwell_0, dwell_1, num_layers, layer_height, rigid_shift_y_reheat)
 
-    toolpath_info = get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power,layer_end_time_discretization=None)
+    toolpath_info = get_toolpath_info(print_path, reheat_path, dwell_0, dwell_1, reheat_power,layer_end_time_discretization=5.0)
 
     toolpath_info['set_dwell_every_n_layers'] = True
-    toolpath_info['includes_end_message'] = False
+    toolpath_info['includes_end_message'] = True
 
     tpp_clean, layer_end_times, actual_layer_variables = create_toolpath(toolpath_info)
 

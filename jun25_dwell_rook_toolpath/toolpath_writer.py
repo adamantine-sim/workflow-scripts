@@ -265,9 +265,9 @@ def create_toolpath(toolpath_info):
     dwell_0                       = toolpath_info['dwell_0']
     reheat_power                  = toolpath_info['reheat_power']
     dwell_1                       = toolpath_info['dwell_1']
-    dwell_0_offset                = toolpath_info['dwell_0_offset']
-    dwell_1_offset                = toolpath_info['dwell_1_offset']
-    dwell_section_offset          = toolpath_info['dwell_section_offset']
+    dwell_0_offset                = toolpath_info.get('dwell_0_offset',0.0)
+    dwell_1_offset                = toolpath_info.get('dwell_1_offset',0.0)
+    dwell_section_offset          = toolpath_info.get('dwell_section_offset',0.0)
     includes_end_message          = toolpath_info.get('includes_end_message', True)
     layer_end_time_discretization = toolpath_info.get('layer_end_time_discretization', None)
     set_dwell_every_n_layers      = toolpath_info.get('set_dwell_every_n_layers')
@@ -328,9 +328,9 @@ def create_toolpath(toolpath_info):
     for layer_idx in range(*toolpath_info['selected_layers']):
         print(f'writing layer idx {layer_idx}')
         # 5a) Pick parameters for this layer
-        d0 = pick_chunk(dwell_0,      layer_idx, num_layers) + dwell_0_offset
-        rp = pick_chunk(reheat_power, layer_idx, num_layers)
-        d1 = pick_chunk(dwell_1,      layer_idx, num_layers) + dwell_1_offset
+        d0 = pick_chunk(dwell_0,      layer_idx+2, num_layers) + dwell_0_offset
+        rp = pick_chunk(reheat_power, layer_idx+2, num_layers)
+        d1 = pick_chunk(dwell_1,      layer_idx+2, num_layers) + dwell_1_offset
         # If we happen to be at the start of one of the sections, add a 20 min dwell instead of the optimized dwell.
         if set_dwell_every_n_layers and ((layer_idx + 2) in quarter_layers_1based):
             print(f'adjusting d1 to 20min for layer_idx {layer_idx}')
@@ -365,8 +365,8 @@ def create_toolpath(toolpath_info):
         pos = new_tpp[-1][1]
 
         # Dwell 1
-        if d1[0] > 0.0:
-            new_tpp += time_position_power_dwell(layer_end_time, pos, d1[0])
+        if d1 > 0.0:
+            new_tpp += time_position_power_dwell(layer_end_time, pos, d1)
             layer_end_time = new_tpp[-1][0]
 
         # Snap to discretization (optional)
@@ -384,7 +384,7 @@ def create_toolpath(toolpath_info):
         section_start_time = layer_end_time
         layer_end_times.append(layer_end_time)
 
-        actual_layer_variables.append({"dwell_0": [d0], "dwell_1": [d1[0]+additional], "reheat_power": reheat_power})
+        actual_layer_variables.append({"dwell_0": [d0], "dwell_1": [d1+additional], "reheat_power": reheat_power})
 
     # 6) Clean up and return
     tpp_clean = strip_duplicate_locations(new_tpp)

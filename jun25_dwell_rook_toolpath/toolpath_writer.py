@@ -232,9 +232,9 @@ def generate_print_plan_file(toolpath_info, plan_filename, actual_layer_variable
 
     data = []
     for layer_idx in range(num_layers):
-        d0 = pick_chunk(dwell_0,      layer_idx, num_layers)
-        rp = pick_chunk(reheat_power, layer_idx, num_layers)
-        d1 = pick_chunk(dwell_1,      layer_idx, num_layers)
+        d0 = pick_chunk(dwell_0,      layer_idx+2, num_layers)
+        rp = pick_chunk(reheat_power, layer_idx+2, num_layers)
+        d1 = pick_chunk(dwell_1,      layer_idx+2, num_layers)
 
         if actual_layer_variables is not None:
             d1 = actual_layer_variables[layer_idx]['dwell_1']

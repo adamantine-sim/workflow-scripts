@@ -122,7 +122,9 @@ def shift_time(layer, new_start_time, eps=1e-12):
     return new_layer
 
 def add_power_off_entry(layer, eps=1e-10):
-    new_layer = [(layer[0][0], layer[0][1], 0.0)]
+    # New layer initial dwell - slightly perturb x position to ensure unique value
+    new_layer_position = (layer[0][1][0] + eps, layer[0][1][1], layer[0][1][2])
+    new_layer = [(layer[0][0], new_layer_position, 0.0)]
     new_layer = new_layer + [(layer[0][0]+ eps, layer[0][1], layer[0][2])]
     new_layer = new_layer + layer[1:]
 
@@ -154,12 +156,26 @@ def flatten_layer_z(layer, reference_index=0):
 
     return new_layer
 
-def strip_duplicate_locations(time_position_power):
+def strip_duplicate_locations(time_position_power, eps=1e-10):
     out = []
     for entry in reversed(time_position_power):
         if len(out) > 0:
+            # Check whether this entry is at the same position as the one after it
             if entry[1] != out[-1][1]:
+                # This entry is at a new position - append this event
                 out.append(entry)
+            else:
+                # This entry is as the same position as the one after it
+                # If both entries are dwells, they can be combined
+                # Otherwise, combining entries will change the scan path itself
+                # To avoid this, slightly perturb the position rather than combining entries
+                # This is necessary as adamantine cannot handle consecutive entries with the same position
+                if entry[2] != 0 or out[-1][2] != 0:
+                    # Slightly perturb x position
+                    modified_position = (entry[1][0] + eps, entry[1][1], entry[1][2])
+                    modified_entry = (entry[0], modified_position, entry[2])
+                    # Append this modified event
+                    out.append(modified_entry)
         else:
             out.append(entry)
 

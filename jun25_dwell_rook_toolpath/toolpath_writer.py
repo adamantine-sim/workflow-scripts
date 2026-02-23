@@ -165,7 +165,7 @@ def strip_duplicate_locations(time_position_power, eps=1e-10):
                 # This entry is at a new position - append this event
                 out.append(entry)
             else:
-                # This entry is as the same position as the one after it
+                # This entry is at the same position as the one after it
                 # If both entries are dwells, they can be combined
                 # Otherwise, combining entries will change the scan path itself
                 # To avoid this, slightly perturb the position rather than combining entries
